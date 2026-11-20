@@ -116,7 +116,12 @@ jobs:
           fi
 
       - name: Run JVM & Robolectric unit tests
-        run: gradle :app:testDebugUnitTest
+        run: |
+          if command -v xvfb-run >/dev/null 2>&1; then
+            xvfb-run -a gradle :app:testDebugUnitTest
+          else
+            gradle :app:testDebugUnitTest
+          fi
 
       - name: Build signed Release APK
         if: steps.signing.outputs.build_type == 'release'
@@ -124,11 +129,21 @@ jobs:
           KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: gradle :app:assembleRelease
+        run: |
+          if command -v xvfb-run >/dev/null 2>&1; then
+            xvfb-run -a gradle :app:assembleRelease
+          else
+            gradle :app:assembleRelease
+          fi
 
       - name: Build Debug APK (fallback when release secrets are unset)
         if: steps.signing.outputs.build_type == 'debug'
-        run: gradle :app:assembleDebug
+        run: |
+          if command -v xvfb-run >/dev/null 2>&1; then
+            xvfb-run -a gradle :app:assembleDebug
+          else
+            gradle :app:assembleDebug
+          fi
 
       - name: Package APK & SHA-256 checksum
         id: artifact
