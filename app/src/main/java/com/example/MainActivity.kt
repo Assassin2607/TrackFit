@@ -158,12 +158,14 @@ private fun FitTrackAuthenticatedShell(
                 val syncManager = FirestoreSyncManager(app, localDb)
                 val repo = FitTrackRepository(localDb, syncManager, app)
                 val prefs = PreferencesManager(app)
+                val bundledRepo = app.getString(R.string.github_releases_repo).trim()
                 FitTrackViewModel(
                     repository = repo,
                     preferencesManager = prefs,
                     currentUserId = currentUserId,
                     authDisplayName = displayName,
-                    authEmail = email
+                    authEmail = email,
+                    defaultGitHubRepo = bundledRepo
                 )
             }
         }
@@ -378,6 +380,7 @@ private fun FitTrackAuthenticatedShell(
                             ProfileScreen(
                                 state = state,
                                 appUpdateStatus = appUpdateStatus,
+                                bundledUpdateSourceConfigured = viewModel.defaultGitHubRepo.isNotBlank(),
                                 onSaveGitHubRepo = viewModel::saveGitHubRepoAndCheck,
                                 onCheckForUpdates = { viewModel.checkForAppUpdates(manual = true) },
                                 onUpdateProfile = viewModel::updateProfile,

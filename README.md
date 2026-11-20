@@ -135,15 +135,12 @@ Within ~2–3 minutes, GitHub Actions will:
 
 ## Automatic Update Alerts on Your Phone
 
-FitTrack includes a built-in, zero-permission **GitHub Releases Update Checker**:
+FitTrack includes a built-in, zero-permission **GitHub Releases Update Checker** that requires **zero manual configuration by end users**:
 
-1. Install your first APK from GitHub Releases onto your phone.
-2. Open FitTrack → go to the **Profile** tab → scroll to **App Updates (GitHub)**.
-3. Enter your repository slug (e.g., `your-username/fittrack` or paste the full GitHub URL) and tap **Save & Check**.
-4. From then on:
-   - Every time you open FitTrack, it checks `https://api.github.com/repos/<owner>/<repo>/releases/latest` in the background.
-   - As soon as you publish a newer release (e.g., `v1.1.0` > `1.0`), an **Update Available** banner appears automatically at the top of your **Home** screen (and in **Profile → App Updates**).
-   - Tap **Download APK** → your phone downloads `FitTrack-vX.Y.Z.apk` directly from GitHub → tap the downloaded file to update in place while keeping all your workouts, nutrition logs, and cloud sync intact.
+1. During every GitHub Actions release build, `.github/workflows/release-apk.yml` automatically stamps your repository (`GITHUB_REPOSITORY`), `versionName`, and `versionCode` into the APK (`app/src/main/res/values/strings.xml`).
+2. Anyone who installs the APK from your GitHub Releases page automatically gets update checks on launch — no repo URL entry or Profile setup needed.
+3. As soon as you publish a newer release (e.g., `v1.2.0` > `1.1.0`), every user's phone shows an **Update Available** banner at the top of the **Home** screen (and a **Download Update** button under **Profile → App Updates**).
+4. Tapping **Download APK** downloads `FitTrack-vX.Y.Z.apk` directly from GitHub so Android updates in place while preserving all local Room data and Firebase Cloud Sync records.
 
 ---
 

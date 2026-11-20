@@ -228,17 +228,19 @@ FitTrack uses **zero AI models** — every calculation is deterministic and audi
 2. **Triggers**:
    - Pushing a Git tag matching `v*.*.*`
    - Clicking **Actions → Build & Publish FitTrack APK Release → Run workflow**
-3. **Version Stamping**:
+3. **Version & Repository Stamping**:
    - Extracts clean semantic version from the tag (`v1.2.0` → `versionName = "1.2.0"`).
    - Computes strictly increasing `versionCode = 100 + GITHUB_RUN_NUMBER` so Android accepts in-place upgrades over `versionCode = 1`.
-4. **Signing Priority**:
+   - Stamps `GITHUB_REPOSITORY` into `app/src/main/res/values/strings.xml` (`github_releases_repo`) so every published APK knows its release repository automatically with zero end-user setup.
+4. **Signing & Firebase Secret Priority**:
+   - Restores `app/google-services.json` from `GOOGLE_SERVICES_JSON_BASE64` or `GOOGLE_SERVICES_JSON` if not committed.
    - `RELEASE_KEYSTORE_BASE64` + `STORE_PASSWORD` + `KEY_PASSWORD` → builds signed **Release APK** (`assembleRelease`).
    - Otherwise `DEBUG_KEYSTORE_BASE64` (or `debug.keystore.base64` / fallback debug keystore) → builds **Debug APK** (`assembleDebug`).
 5. **Release Artifacts**:
    - `FitTrack-v<version>.apk`
    - `FitTrack-v<version>.apk.sha256`
 6. **In-App Update Detection (`GitHubUpdateChecker.kt`)**:
-   - User saves `owner/repo` once in **Profile → App Updates (GitHub)** (persisted in DataStore).
-   - On launch (and via **Check Now**), FitTrack fetches `https://api.github.com/repos/{owner}/{repo}/releases/latest`.
+   - Reads the CI-stamped `R.string.github_releases_repo` automatically (hiding the developer repo input in Profile for end users).
+   - On launch (and via **Check for Updates**), FitTrack fetches `https://api.github.com/repos/{owner}/{repo}/releases/latest`.
    - Parses `tag_name` vs `BuildConfig.VERSION_NAME` via semantic version comparison and locates the `.apk` asset's `browser_download_url`.
    - Displays a dismissible **Update Available** banner on **Home** and a download action with release notes in **Profile**.

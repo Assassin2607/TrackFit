@@ -71,6 +71,7 @@ import com.example.viewmodel.FitTrackUiState
 fun ProfileScreen(
     state: FitTrackUiState,
     appUpdateStatus: AppUpdateStatus = AppUpdateStatus.Idle,
+    bundledUpdateSourceConfigured: Boolean = false,
     onSaveGitHubRepo: (String) -> Unit = {},
     onCheckForUpdates: () -> Unit = {},
     onUpdateProfile: (UserProfileEntity, Boolean) -> Unit,
@@ -270,8 +271,9 @@ fun ProfileScreen(
             }
         }
 
-        // App Updates via GitHub Releases
+        // App Updates
         item {
+            val canCheckUpdates = bundledUpdateSourceConfigured || state.preferences.githubRepo.isNotBlank()
             FitTrackCard(modifier = Modifier.testTag("app_updates_card")) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -285,7 +287,7 @@ fun ProfileScreen(
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("App Updates (GitHub)", style = MaterialTheme.typography.titleMedium)
+                        Text("App Updates", style = MaterialTheme.typography.titleMedium)
                     }
                     Text(
                         text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
@@ -294,37 +296,18 @@ fun ProfileScreen(
                     )
                 }
                 Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Link your GitHub repository to check for new APK releases automatically whenever you publish an update.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = FitTrackThemeExt.colors.mutedText
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = githubRepoInput,
-                    onValueChange = { githubRepoInput = it },
-                    label = { Text("GitHub Repository (owner/repo)") },
-                    placeholder = { Text("e.g. username/fittrack") },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("github_repo_input")
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { onSaveGitHubRepo(githubRepoInput) },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("save_github_repo_button")
-                    ) {
-                        Text("Save & Check")
-                    }
+                if (bundledUpdateSourceConfigured) {
+                    Text(
+                        text = "FitTrack checks automatically for new releases whenever you open the app.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = FitTrackThemeExt.colors.mutedText
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
                     OutlinedButton(
                         onClick = onCheckForUpdates,
-                        enabled = state.preferences.githubRepo.isNotBlank() && appUpdateStatus !is AppUpdateStatus.Checking,
+                        enabled = appUpdateStatus !is AppUpdateStatus.Checking,
                         modifier = Modifier
-                            .weight(1f)
+                            .fillMaxWidth()
                             .testTag("check_updates_button")
                     ) {
                         if (appUpdateStatus is AppUpdateStatus.Checking) {
@@ -333,7 +316,51 @@ fun ProfileScreen(
                                 strokeWidth = 2.dp
                             )
                         } else {
-                            Text("Check Now")
+                            Text("Check for Updates")
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "Local dev build detected. Releases built via GitHub Actions configure updates automatically—or link a repo below to test.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = FitTrackThemeExt.colors.mutedText
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = githubRepoInput,
+                        onValueChange = { githubRepoInput = it },
+                        label = { Text("GitHub Repository (owner/repo)") },
+                        placeholder = { Text("e.g. username/fittrack") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("github_repo_input")
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { onSaveGitHubRepo(githubRepoInput) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("save_github_repo_button")
+                        ) {
+                            Text("Save & Check")
+                        }
+                        OutlinedButton(
+                            onClick = onCheckForUpdates,
+                            enabled = canCheckUpdates && appUpdateStatus !is AppUpdateStatus.Checking,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("check_updates_button")
+                        ) {
+                            if (appUpdateStatus is AppUpdateStatus.Checking) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text("Check Now")
+                            }
                         }
                     }
                 }
@@ -342,7 +369,7 @@ fun ProfileScreen(
                     is AppUpdateStatus.UpdateAvailable -> {
                         val info = appUpdateStatus.info
                         Text(
-                            text = "New release available: ${info.tagName}",
+                            text = "New version available: ${info.tagName}",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = FitTrackThemeExt.colors.success
@@ -367,12 +394,12 @@ fun ProfileScreen(
                         ) {
                             Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Download ${info.tagName} APK from GitHub")
+                            Text("Download Update (${info.tagName})")
                         }
                     }
                     is AppUpdateStatus.UpToDate -> {
                         Text(
-                            text = "Up to date (v${appUpdateStatus.currentVersion}).",
+                            text = "You're on the latest version (v${appUpdateStatus.currentVersion}).",
                             style = MaterialTheme.typography.bodySmall,
                             color = FitTrackThemeExt.colors.success
                         )
@@ -386,14 +413,14 @@ fun ProfileScreen(
                     }
                     AppUpdateStatus.Unconfigured -> {
                         Text(
-                            text = "Not linked yet. Push to GitHub, then enter owner/repo above.",
+                            text = "Build via GitHub Actions to embed automatic updates for all users.",
                             style = MaterialTheme.typography.bodySmall,
                             color = FitTrackThemeExt.colors.mutedText
                         )
                     }
                     AppUpdateStatus.Checking -> {
                         Text(
-                            text = "Checking GitHub Releases…",
+                            text = "Checking for updates…",
                             style = MaterialTheme.typography.bodySmall,
                             color = FitTrackThemeExt.colors.mutedText
                         )

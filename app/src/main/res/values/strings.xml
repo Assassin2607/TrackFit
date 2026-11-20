@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">FitTrack</string>
+    <string name="github_releases_repo" translatable="false"></string>
 </resources>

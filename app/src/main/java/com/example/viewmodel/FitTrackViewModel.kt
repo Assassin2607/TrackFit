@@ -174,7 +174,8 @@ class FitTrackViewModel(
     private val preferencesManager: PreferencesManager,
     private val currentUserId: String,
     val authDisplayName: String,
-    val authEmail: String
+    val authEmail: String,
+    val defaultGitHubRepo: String = ""
 ) : ViewModel() {
 
     private val _selectedDateKey = MutableStateFlow(FitnessCalculations.todayDateKey())
@@ -200,13 +201,18 @@ class FitTrackViewModel(
         viewModelScope.launch {
             repository.initializeUserSession(currentUserId)
             _isInitialized.value = true
-            val savedRepo = preferencesManager.preferencesFlow.first().githubRepo
-            if (savedRepo.isNotBlank()) {
-                checkForAppUpdates(manual = false, repoOverride = savedRepo)
+            val effectiveRepo = resolveEffectiveGitHubRepo()
+            if (effectiveRepo.isNotBlank()) {
+                checkForAppUpdates(manual = false, repoOverride = effectiveRepo)
             } else {
                 _appUpdateStatus.value = AppUpdateStatus.Unconfigured
             }
         }
+    }
+
+    private suspend fun resolveEffectiveGitHubRepo(): String {
+        val userOverride = preferencesManager.preferencesFlow.first().githubRepo.trim()
+        return userOverride.ifBlank { defaultGitHubRepo.trim() }
     }
 
     private data class CoreBundle(
@@ -604,10 +610,10 @@ class FitTrackViewModel(
 
     fun checkForAppUpdates(manual: Boolean = true, repoOverride: String? = null) {
         viewModelScope.launch {
-            val repo = repoOverride ?: preferencesManager.preferencesFlow.first().githubRepo
+            val repo = repoOverride ?: resolveEffectiveGitHubRepo()
             if (repo.isBlank()) {
                 _appUpdateStatus.value = AppUpdateStatus.Unconfigured
-                if (manual) postMessage("Set your GitHub repo (owner/repo) first.")
+                if (manual) postMessage("Updates are enabled automatically in GitHub Release builds.")
                 return@launch
             }
             _appUpdateStatus.value = AppUpdateStatus.Checking
@@ -620,7 +626,7 @@ class FitTrackViewModel(
                 when (result) {
                     is AppUpdateStatus.UpdateAvailable -> {
                         _updateBannerDismissed.value = false
-                        postMessage("Update ${result.info.tagName} is available on GitHub!")
+                        postMessage("Update ${result.info.tagName} is available!")
                     }
                     is AppUpdateStatus.UpToDate -> {
                         postMessage("FitTrack v${result.currentVersion} is up to date.")

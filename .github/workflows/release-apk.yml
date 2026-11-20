@@ -60,12 +60,14 @@ jobs:
           echo "version=${CLEAN_VERSION}" >> "$GITHUB_OUTPUT"
           echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
 
-      - name: Stamp release versionName & versionCode for CI build
+      - name: Stamp release versionName, versionCode & repository for CI build
         shell: bash
         run: |
           sed -i "s/versionCode = [0-9]\+/versionCode = ${{ steps.meta.outputs.version_code }}/" app/build.gradle.kts
           sed -i "s/versionName = \"[^\"]*\"/versionName = \"${{ steps.meta.outputs.version }}\"/" app/build.gradle.kts
+          sed -i "s|<string name=\"github_releases_repo\" translatable=\"false\">.*</string>|<string name=\"github_releases_repo\" translatable=\"false\">${GITHUB_REPOSITORY}</string>|" app/src/main/res/values/strings.xml
           grep -E "versionCode|versionName" app/build.gradle.kts
+          grep "github_releases_repo" app/src/main/res/values/strings.xml
 
       - name: Restore google-services.json from secret (if not committed)
         shell: bash
