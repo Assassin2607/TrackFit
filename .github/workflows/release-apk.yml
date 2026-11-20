@@ -1,0 +1,161 @@
+name: Build & Publish FitTrack APK Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: "Release tag (e.g. v1.1.0). Must be higher than the currently installed version for phones to show an update."
+        required: true
+        default: "v1.1.0"
+      release_notes:
+        description: "What changed in this release?"
+        required: false
+        default: "Updated FitTrack Android build."
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Test, Build APK & Publish GitHub Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.3.1"
+
+      - name: Resolve release tag & version metadata
+        id: meta
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.version_tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          # Ensure leading "v" on tag
+          if [[ "$TAG" != v* ]]; then
+            TAG="v${TAG}"
+          fi
+          CLEAN_VERSION="${TAG#v}"
+          VERSION_CODE=$((100 + GITHUB_RUN_NUMBER))
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${CLEAN_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
+
+      - name: Stamp release versionName & versionCode for CI build
+        shell: bash
+        run: |
+          sed -i "s/versionCode = [0-9]\+/versionCode = ${{ steps.meta.outputs.version_code }}/" app/build.gradle.kts
+          sed -i "s/versionName = \"[^\"]*\"/versionName = \"${{ steps.meta.outputs.version }}\"/" app/build.gradle.kts
+          grep -E "versionCode|versionName" app/build.gradle.kts
+
+      - name: Restore google-services.json from secret (if not committed)
+        shell: bash
+        env:
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
+            echo "Restoring app/google-services.json from GOOGLE_SERVICES_JSON_BASE64 secret."
+            echo "$GOOGLE_SERVICES_JSON_BASE64" | tr -d '\r\n' | base64 -d > app/google-services.json
+          elif [ ! -f app/google-services.json ]; then
+            echo "::error::app/google-services.json is missing. Add GOOGLE_SERVICES_JSON_BASE64 to GitHub Repository Secrets."
+            exit 1
+          fi
+
+      - name: Prepare signing keystore
+        id: signing
+        shell: bash
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$RELEASE_KEYSTORE_BASE64" ]; then
+            echo "Using RELEASE_KEYSTORE_BASE64 secret for signed release APK."
+            echo "$RELEASE_KEYSTORE_BASE64" | tr -d '\r\n' | base64 -d > my-upload-key.jks
+            echo "build_type=release" >> "$GITHUB_OUTPUT"
+          elif [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
+            echo "Using DEBUG_KEYSTORE_BASE64 secret for signed debug APK."
+            echo "$DEBUG_KEYSTORE_BASE64" | tr -d '\r\n' | base64 -d > debug.keystore
+            echo "build_type=debug" >> "$GITHUB_OUTPUT"
+          elif [ -f debug.keystore.base64 ]; then
+            echo "Decoding bundled debug.keystore.base64."
+            tr -d '\r\n' < debug.keystore.base64 | base64 -d > debug.keystore
+            echo "build_type=debug" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::No keystore secret configured. Generating an ephemeral debug.keystore. Configure RELEASE_KEYSTORE_BASE64 or DEBUG_KEYSTORE_BASE64 in GitHub Secrets so Google Sign-In & in-place phone updates stay consistent."
+            keytool -genkeypair -v \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+            echo "build_type=debug" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run JVM & Robolectric unit tests
+        run: gradle :app:testDebugUnitTest
+
+      - name: Build signed Release APK
+        if: steps.signing.outputs.build_type == 'release'
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: gradle :app:assembleRelease
+
+      - name: Build Debug APK (fallback when release secrets are unset)
+        if: steps.signing.outputs.build_type == 'debug'
+        run: gradle :app:assembleDebug
+
+      - name: Package APK & SHA-256 checksum
+        id: artifact
+        shell: bash
+        run: |
+          mkdir -p release-artifacts
+          TAG="${{ steps.meta.outputs.tag }}"
+          if [ "${{ steps.signing.outputs.build_type }}" = "release" ]; then
+            SRC_APK="app/build/outputs/apk/release/app-release.apk"
+          else
+            SRC_APK="app/build/outputs/apk/debug/app-debug.apk"
+          fi
+
+          OUT_APK="release-artifacts/FitTrack-${TAG}.apk"
+          cp "$SRC_APK" "$OUT_APK"
+          sha256sum "$OUT_APK" > "${OUT_APK}.sha256"
+          echo "apk_path=${OUT_APK}" >> "$GITHUB_OUTPUT"
+          echo "sha_path=${OUT_APK}.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release with downloadable APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: FitTrack ${{ steps.meta.outputs.tag }}
+          body: |
+            ${{ github.event.inputs.release_notes || 'New FitTrack Android release.' }}
+
+            ### How to Install / Update on Your Phone
+            1. Download **`FitTrack-${{ steps.meta.outputs.tag }}.apk`** from the **Assets** section below.
+            2. Tap the downloaded APK on your Android phone to update in place (your local Room database and Firebase Cloud Sync data are preserved).
+          files: |
+            ${{ steps.artifact.outputs.apk_path }}
+            ${{ steps.artifact.outputs.sha_path }}
+          generate_release_notes: true

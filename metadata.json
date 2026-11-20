@@ -1,0 +1,6 @@
+{
+  "name": "FitTrack",
+  "description": "Personal fitness operating system for deterministic strength, cardio, nutrition, and weight trend tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
