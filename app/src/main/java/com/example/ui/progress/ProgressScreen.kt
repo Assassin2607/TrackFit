@@ -141,9 +141,13 @@ fun ProgressScreen(
                         }
                         val goalDisplay = state.profile?.goalWeightKg?.let { FitnessCalculations.kgToDisplay(it, unit) }
 
-                        FitTrackCard {
-                            Text("Weight & 7-Day Rolling Average", style = MaterialTheme.typography.titleMedium)
-                            Spacer(modifier = Modifier.height(6.dp))
+                        FitTrackCard(depthElevation = 6.dp) {
+                            Text(
+                                text = "Weight & 7-Day Rolling Average",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
@@ -172,11 +176,15 @@ fun ProgressScreen(
                     }
 
                     item {
-                        FitTrackCard {
-                            Text("7-Day Calorie Adherence", style = MaterialTheme.typography.titleMedium)
+                        FitTrackCard(depthElevation = 6.dp) {
+                            Text(
+                                text = "7-Day Calorie Adherence",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Dashed amber line = ${state.profile?.calorieTarget ?: 2100} kcal target",
+                                text = "Dashed gold line = ${state.profile?.calorieTarget ?: 2100} kcal target",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = FitTrackThemeExt.colors.mutedText
                             )
@@ -184,14 +192,19 @@ fun ProgressScreen(
                             MetricBarChart(
                                 bars = state.weeklyCaloriesSeries.map { it.shortLabel to it.calories.toFloat() },
                                 targetValue = (state.profile?.calorieTarget ?: 2100).toFloat(),
-                                barColor = MaterialTheme.colorScheme.primary
+                                barColor = MaterialTheme.colorScheme.primary,
+                                unitSuffix = " kcal"
                             )
                         }
                     }
 
                     item {
-                        FitTrackCard {
-                            Text("7-Day Protein Adherence", style = MaterialTheme.typography.titleMedium)
+                        FitTrackCard(depthElevation = 6.dp) {
+                            Text(
+                                text = "7-Day Protein Adherence",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "Target: ${state.profile?.proteinTargetG ?: 160} g/day",
@@ -202,15 +215,49 @@ fun ProgressScreen(
                             MetricBarChart(
                                 bars = state.weeklyCaloriesSeries.map { it.shortLabel to it.proteinG.toFloat() },
                                 targetValue = (state.profile?.proteinTargetG ?: 160).toFloat(),
-                                barColor = FitTrackThemeExt.colors.success
+                                barColor = FitTrackThemeExt.colors.success,
+                                unitSuffix = " g"
                             )
                         }
                     }
 
                     item {
-                        FitTrackCard {
-                            Text("30-Day Volume by Muscle Group", style = MaterialTheme.typography.titleMedium)
-                            Spacer(modifier = Modifier.height(8.dp))
+                        val waterDisplayBars = state.weeklyWaterSeries.map { pt ->
+                            pt.shortLabel to FitnessCalculations.mlToDisplayWater(pt.amountMl, unit).toFloat()
+                        }
+                        val waterTargetDisplay = FitnessCalculations.mlToDisplayWater(state.waterTargetMl, unit).toFloat()
+                        val waterSuffix = " ${FitnessCalculations.waterUnitLabel(unit)}"
+
+                        FitTrackCard(depthElevation = 6.dp, modifier = Modifier.testTag("progress_hydration_chart")) {
+                            Text(
+                                text = "7-Day Hydration Intake",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Target: ${FitnessCalculations.formatWater(state.waterTargetMl, unit)} / day",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = FitTrackThemeExt.colors.mutedText
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            MetricBarChart(
+                                bars = waterDisplayBars,
+                                targetValue = waterTargetDisplay,
+                                barColor = FitTrackThemeExt.colors.hydrationAccent,
+                                unitSuffix = waterSuffix
+                            )
+                        }
+                    }
+
+                    item {
+                        FitTrackCard(depthElevation = 6.dp) {
+                            Text(
+                                text = "30-Day Volume by Muscle Group",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
                             if (state.volumeByMuscleKg.isEmpty()) {
                                 Text(
                                     "Complete strength workouts to populate muscle volume analytics.",
@@ -218,21 +265,14 @@ fun ProgressScreen(
                                     color = FitTrackThemeExt.colors.mutedText
                                 )
                             } else {
-                                state.volumeByMuscleKg.entries.sortedByDescending { it.value }.forEach { (mg, volKg) ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text(MuscleGroup.fromNameSafe(mg).label, style = MaterialTheme.typography.bodyMedium)
-                                        Text(
-                                            FitnessCalculations.formatVolume(volKg, unit),
-                                            style = MonoMetricSmall,
-                                            color = FitTrackThemeExt.colors.volumeAccent
-                                        )
-                                    }
-                                }
+                                val sortedMuscles = state.volumeByMuscleKg.entries
+                                    .sortedByDescending { it.value }
+                                    .map { (mg, vol) -> MuscleGroup.fromNameSafe(mg).label to vol }
+                                com.example.ui.components.MuscleVolumeBarChart(
+                                    items = sortedMuscles,
+                                    valueFormatter = { FitnessCalculations.formatVolume(it, unit) },
+                                    accentColor = FitTrackThemeExt.colors.volumeAccent
+                                )
                             }
                         }
                     }

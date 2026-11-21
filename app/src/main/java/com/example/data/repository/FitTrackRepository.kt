@@ -13,6 +13,7 @@ import com.example.data.local.SavedMealEntity
 import com.example.data.local.SyncQueueEntity
 import com.example.data.local.UserGoalEntity
 import com.example.data.local.UserProfileEntity
+import com.example.data.local.WaterLogEntity
 import com.example.data.local.WeightLogEntity
 import com.example.data.local.WorkoutSessionEntity
 import com.example.data.local.WorkoutSetEntity
@@ -76,6 +77,9 @@ class FitTrackRepository(
 
     fun observeFoodLogs(userId: String): Flow<List<FoodLogEntity>> =
         localDb.nutritionDao().observeFoodLogs(userId)
+
+    fun observeWaterLogs(userId: String): Flow<List<WaterLogEntity>> =
+        localDb.nutritionDao().observeWaterLogs(userId)
 
     fun observeWeightLogs(userId: String): Flow<List<WeightLogEntity>> =
         localDb.bodyMetricsDao().observeWeightLogs(userId)
@@ -450,6 +454,40 @@ class FitTrackRepository(
         enqueueAndSync(userId, FirestoreSyncManager.COLLECTION_FOOD_LOGS, logId, FirestoreSyncManager.ACTION_DELETE)
     }
 
+    // --- Water Log ---
+
+    suspend fun logWater(
+        userId: String,
+        amountMl: Int,
+        dateKey: String = FitnessCalculations.todayDateKey()
+    ) {
+        val safeMl = amountMl.coerceIn(1, 5000)
+        val id = "wl_${UUID.randomUUID().toString().take(8)}"
+        val log = WaterLogEntity(
+            id = id,
+            userId = userId,
+            amountMl = safeMl,
+            dateKey = dateKey,
+            loggedAtEpochMs = System.currentTimeMillis()
+        )
+        localDb.nutritionDao().upsertWaterLog(log)
+        enqueueAndSync(userId, FirestoreSyncManager.COLLECTION_WATER_LOGS, id)
+    }
+
+    suspend fun deleteWaterLog(userId: String, logId: String) {
+        localDb.nutritionDao().deleteWaterLog(userId, logId)
+        enqueueAndSync(userId, FirestoreSyncManager.COLLECTION_WATER_LOGS, logId, FirestoreSyncManager.ACTION_DELETE)
+    }
+
+    suspend fun updateWaterTargetMl(userId: String, targetMl: Int) {
+        val existing = localDb.userProfileDao().getProfile(userId) ?: return
+        val sanitized = if (targetMl == 0) 0 else targetMl.coerceIn(500, 10000)
+        localDb.userProfileDao().upsert(
+            existing.copy(waterTargetMl = sanitized, updatedAtEpochMs = System.currentTimeMillis())
+        )
+        enqueueAndSync(userId, FirestoreSyncManager.COLLECTION_PROFILE, userId)
+    }
+
     // --- Weight, Body Measurements & Progress Photos ---
 
     suspend fun logWeight(
@@ -559,6 +597,7 @@ class FitTrackRepository(
         val workouts = localDb.workoutSessionDao().observeSessions(userId).first()
         val cardio = localDb.cardioSessionDao().observeCardio(userId).first()
         val foodLogs = localDb.nutritionDao().observeFoodLogs(userId).first()
+        val waterLogs = localDb.nutritionDao().observeWaterLogs(userId).first()
         val weights = localDb.bodyMetricsDao().observeWeightLogs(userId).first()
         val measurements = localDb.bodyMetricsDao().observeMeasurements(userId).first()
 
@@ -573,11 +612,13 @@ class FitTrackRepository(
                     put("goalWeightKg", it.goalWeightKg)
                     put("calorieTarget", it.calorieTarget)
                     put("proteinTargetG", it.proteinTargetG)
+                    put("waterTargetMl", FitnessCalculations.resolveWaterTargetMl(it.waterTargetMl, it.currentWeightKg))
                 }
             })
             put("workoutsCount", workouts.size)
             put("cardioCount", cardio.size)
             put("foodLogsCount", foodLogs.size)
+            put("waterLogsCount", waterLogs.size)
             put("weightLogs", JSONArray().apply {
                 weights.forEach { w ->
                     put(JSONObject().apply {
@@ -627,6 +668,7 @@ class FitTrackRepository(
             localDb.nutritionDao().deleteCustomFoodsForUser(userId)
             localDb.nutritionDao().deleteSavedMealsForUser(userId)
             localDb.nutritionDao().deleteFoodLogsForUser(userId)
+            localDb.nutritionDao().deleteWaterLogsForUser(userId)
             localDb.bodyMetricsDao().deleteWeightsForUser(userId)
             localDb.bodyMetricsDao().deleteMeasurementsForUser(userId)
             localDb.bodyMetricsDao().deletePhotosForUser(userId)

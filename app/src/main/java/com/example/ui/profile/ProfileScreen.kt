@@ -149,6 +149,10 @@ fun ProfileScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                     ProfileInfoRow("Goal", "${GoalType.fromNameSafe(profile.goalType).label} (${FitnessCalculations.formatWeight(profile.goalWeightKg, unit)})")
                     ProfileInfoRow("Daily Target", "${profile.calorieTarget} kcal • ${profile.proteinTargetG}g protein")
+                    ProfileInfoRow(
+                        "Hydration Target",
+                        "${FitnessCalculations.formatWater(state.waterTargetMl, unit)} (${if (state.isAutoWaterTarget) "Auto 35 ml/kg" else "Custom"})"
+                    )
                     ProfileInfoRow("BMR / Est. TDEE", "$bmr kcal / $tdee kcal")
                     ProfileInfoRow("Training / Cardio", "${profile.trainingDaysPerWeek} days/wk • ${profile.cardioTargetMinPerDay} min/day")
                     ProfileInfoRow("Goal History", "${state.goalHistory.size} recorded goal milestone(s)")
@@ -483,6 +487,7 @@ fun ProfileScreen(
                     FormulaBlock("Daily Score (0–100)", "Nutrition Adherence (25) + Protein Target (20) + Strength Workout (25) + Cardio Target (15) + Logging Consistency (15)")
                     FormulaBlock("Workout Volume & 1RM", "Set Volume = Weight × Reps. Estimated 1RM (Epley) = Weight × (1 + Reps ÷ 30).")
                     FormulaBlock("Cardio Estimation", "Adjusted MET(activity, speed, incline, level) × Body Weight(kg) × Duration(hours).")
+                    FormulaBlock("Daily Hydration Target", "Auto default = 35 ml × Body Weight(kg), clamped to 1,500–6,000 ml (editable anytime).")
                 }
             },
             confirmButton = {
@@ -560,6 +565,7 @@ private fun EditGoalDialog(
     var calorieText by remember { mutableStateOf(profile.calorieTarget.toString()) }
     var proteinText by remember { mutableStateOf(profile.proteinTargetG.toString()) }
     var cardioText by remember { mutableStateOf(profile.cardioTargetMinPerDay.toString()) }
+    var waterText by remember { mutableStateOf(if (profile.waterTargetMl in 500..10000) profile.waterTargetMl.toString() else "0") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -623,6 +629,14 @@ private fun EditGoalDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                OutlinedTextField(
+                    value = waterText,
+                    onValueChange = { waterText = it.filter(Char::isDigit).take(5) },
+                    label = { Text("Daily Water Target (ml, 0 = Auto 35 ml/kg)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
@@ -632,13 +646,16 @@ private fun EditGoalDialog(
                     val cal = calorieText.toIntOrNull()?.coerceIn(1000, 8000) ?: profile.calorieTarget
                     val pro = proteinText.toIntOrNull()?.coerceIn(30, 450) ?: profile.proteinTargetG
                     val car = cardioText.toIntOrNull()?.coerceIn(0, 300) ?: profile.cardioTargetMinPerDay
+                    val rawWater = waterText.toIntOrNull() ?: 0
+                    val water = if (rawWater == 0) 0 else rawWater.coerceIn(500, 10000)
                     onSave(
                         profile.copy(
                             goalType = goalType.name,
                             goalWeightKg = gw,
                             calorieTarget = cal,
                             proteinTargetG = pro,
-                            cardioTargetMinPerDay = car
+                            cardioTargetMinPerDay = car,
+                            waterTargetMl = water
                         )
                     )
                 }

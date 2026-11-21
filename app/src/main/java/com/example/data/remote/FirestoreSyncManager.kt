@@ -13,6 +13,7 @@ import com.example.data.local.SavedMealEntity
 import com.example.data.local.SyncQueueEntity
 import com.example.data.local.UserGoalEntity
 import com.example.data.local.UserProfileEntity
+import com.example.data.local.WaterLogEntity
 import com.example.data.local.WeightLogEntity
 import com.example.data.local.WorkoutSessionEntity
 import com.example.data.local.WorkoutSetEntity
@@ -160,6 +161,7 @@ class FirestoreSyncManager(
                             "calorieTarget" to profile.calorieTarget.coerceIn(1000, 8000),
                             "proteinTargetG" to profile.proteinTargetG.coerceIn(30, 450),
                             "cardioTargetMinPerDay" to profile.cardioTargetMinPerDay.coerceIn(0, 300),
+                            "waterTargetMl" to if (profile.waterTargetMl in 500..10000) profile.waterTargetMl else 0,
                             "onboardingCompleted" to profile.onboardingCompleted
                         )
                     )
@@ -327,6 +329,18 @@ class FirestoreSyncManager(
                     )
                 }
 
+                COLLECTION_WATER_LOGS -> {
+                    val log = localDb.nutritionDao().getWaterLogById(uid, entry.documentId) ?: return Result.success(Unit)
+                    upsertPreservingCreatedAt(
+                        docRef = userDoc.collection(COLLECTION_WATER_LOGS).document(log.id),
+                        mutableFields = mapOf(
+                            "amountMl" to log.amountMl.coerceIn(1, 5000),
+                            "dateKey" to log.dateKey,
+                            "loggedAtEpochMs" to log.loggedAtEpochMs
+                        )
+                    )
+                }
+
                 COLLECTION_WEIGHT_LOGS -> {
                     val log = localDb.bodyMetricsDao().getWeightById(uid, entry.documentId) ?: return Result.success(Unit)
                     upsertPreservingCreatedAt(
@@ -418,6 +432,7 @@ class FirestoreSyncManager(
                         calorieTarget = (d["calorieTarget"] as? Number)?.toInt() ?: 2100,
                         proteinTargetG = (d["proteinTargetG"] as? Number)?.toInt() ?: 160,
                         cardioTargetMinPerDay = (d["cardioTargetMinPerDay"] as? Number)?.toInt() ?: 20,
+                        waterTargetMl = (d["waterTargetMl"] as? Number)?.toInt() ?: 0,
                         onboardingCompleted = (d["onboardingCompleted"] as? Boolean) ?: false,
                         updatedAtEpochMs = System.currentTimeMillis()
                     )
@@ -602,6 +617,20 @@ class FirestoreSyncManager(
                 )
             }
 
+            val waterSnap = userDoc.collection(COLLECTION_WATER_LOGS).get().await()
+            for (doc in waterSnap.documents) {
+                val d = doc.data.orEmpty()
+                localDb.nutritionDao().upsertWaterLog(
+                    WaterLogEntity(
+                        id = doc.id,
+                        userId = uid,
+                        amountMl = (d["amountMl"] as? Number)?.toInt() ?: 250,
+                        dateKey = (d["dateKey"] as? String) ?: "",
+                        loggedAtEpochMs = (d["loggedAtEpochMs"] as? Number)?.toLong() ?: System.currentTimeMillis()
+                    )
+                )
+            }
+
             // 6. Weight & Measurements & Photo Metadata
             val weightsSnap = userDoc.collection(COLLECTION_WEIGHT_LOGS).get().await()
             for (doc in weightsSnap.documents) {
@@ -675,8 +704,8 @@ class FirestoreSyncManager(
             val collections = listOf(
                 COLLECTION_GOALS, COLLECTION_EXERCISES, COLLECTION_TEMPLATES,
                 COLLECTION_WORKOUTS, COLLECTION_CARDIO, COLLECTION_CUSTOM_FOODS,
-                COLLECTION_MEALS, COLLECTION_FOOD_LOGS, COLLECTION_WEIGHT_LOGS,
-                COLLECTION_MEASUREMENTS, COLLECTION_PROGRESS_PHOTOS
+                COLLECTION_MEALS, COLLECTION_FOOD_LOGS, COLLECTION_WATER_LOGS,
+                COLLECTION_WEIGHT_LOGS, COLLECTION_MEASUREMENTS, COLLECTION_PROGRESS_PHOTOS
             )
             for (col in collections) {
                 val snap = userDoc.collection(col).get().await()
@@ -707,6 +736,7 @@ class FirestoreSyncManager(
         const val COLLECTION_CUSTOM_FOODS = "custom_foods"
         const val COLLECTION_MEALS = "meals"
         const val COLLECTION_FOOD_LOGS = "food_logs"
+        const val COLLECTION_WATER_LOGS = "water_logs"
         const val COLLECTION_WEIGHT_LOGS = "weight_logs"
         const val COLLECTION_MEASUREMENTS = "measurements"
         const val COLLECTION_PROGRESS_PHOTOS = "progress_photos"

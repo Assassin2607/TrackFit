@@ -81,33 +81,16 @@ This document is the complete, exact inventory of every module, file, design tok
 
 ## 3. Design System Pin-to-Pin
 
-### Dark-First Color Palette (`Color.kt`)
-| Token | Hex | Role |
+### Per-Tab Animated 3D Color Palettes (`Color.kt` & `Theme.kt`)
+FitTrack transitions smoothly across all five sections (`animateColorAsState`, `380ms FastOutSlowInEasing`) while rendering layered 3D beveled cards (`FitTrackCard`), recessed 3D rings (`DailyScoreRing`, `Hydration3DRing`), and directional cross-tab `NavHost` slide/fade/scale transitions:
+
+| Section | Primary + Secondary Palette | Mode & Key Accents |
 | :--- | :--- | :--- |
-| `Slate950` | `#090E1A` | Deepest backdrop |
-| `Slate900` | `#0F172A` | Primary screen background & adaptive icon background |
-| `Slate800` | `#1E293B` | Cards & primary surfaces |
-| `Slate750` | `#263348` | Elevated surfaces |
-| `Slate700` | `#334155` | Borders & dividers |
-| `Slate600` | `#475569` | Disabled / subtle icons |
-| `Slate400` | `#94A3B8` | Muted labels & secondary captions |
-| `Slate200` | `#E2E8F0` | Secondary body copy |
-| `Slate50` | `#F8FAFC` | Primary high-contrast text |
-| `Cobalt500` | `#2563EB` | Primary brand action |
-| `Cobalt400` | `#3B82F6` | Active indicator / focus |
-| `Cobalt900` | `#172554` | Primary container dark |
-| `Cobalt100` | `#DBEAFE` | On primary container |
-| `Emerald500` | `#22C55E` | Success / PR / Synced / Up-to-date |
-| `Emerald900` | `#14532D` | Success container dark |
-| `Emerald100` | `#DCFCE7` | On success container |
-| `Amber500` | `#F59E0B` | Warning / Pending sync / Coaching |
-| `Amber900` | `#451A03` | Warning container dark |
-| `Amber100` | `#FEF3C7` | On warning container |
-| `Crimson500` | `#EF4444` | Danger / Destructive / Safety alert |
-| `Crimson900` | `#450A0A` | Error container dark |
-| `Crimson100` | `#FEE2E2` | On error container |
-| `Cyan400` | `#22D3EE` | Cardio & secondary chart accent |
-| `Violet400` | `#A78BFA` | Strength volume chart accent |
+| **Home** (`FitTrackSection.HOME`) | Deep Indigo `#252A5A` + Terracotta `#C66A4A` | Dark 3D theme, terracotta highlight & beveled indigo decks |
+| **Workout** (`FitTrackSection.WORKOUT`) | Crimson `#701A1F` + Royal Blue `#1E3A8A` | Exclusive to Workout & Active Workout; dual-tone crimson/blue 3D cards |
+| **Nutrition** (`FitTrackSection.NUTRITION`) | Botanical Lime `#C1E899` + Soft Sage `#E6F0DC` | Light botanical 3D mode with dark forest ink `#152913` & dark system bar icons |
+| **Progress** (`FitTrackSection.PROGRESS`) | Warm Obsidian `#282623` + Stone Pewter `#898681` | Dark warm-stone 3D theme with interactive Bezier & 3D beveled charts |
+| **Profile** (`FitTrackSection.PROFILE`) | Deep Teal `#134E4A` + Warm Gold `#D4A373` | Dark teal & warm-gold 3D settings cards |
 
 ### Typography (`res/font/` & `Type.kt`)
 - **Headlines & Titles**: `Space Grotesk` (`res/font/space_grotesk.ttf`)
@@ -156,18 +139,22 @@ FitTrack uses **zero AI models** — every calculation is deterministic and audi
 7. **MET-Based Cardio Expenditure**:
    - $\text{kcal} = \text{AdjustedMET} \times \text{weight}_{\text{kg}} \times (\text{duration}_{\text{min}} \div 60.0)$
    - Supports Walking (with speed + incline `+0.42 MET/%`), Running (`speedKmh * 0.98`), Cycling, Elliptical, Rowing, Stairmaster, Swimming, Jump Rope, HIIT, and Sports.
-8. **Unit Conversion Constants**:
+8. **Daily Hydration Target (Dedicated Metric — Does Not Alter 100-Pt Score Weights)**:
+   - Default auto target (`waterTargetMl == 0`): $\text{weight}_{\text{kg}} \times 35\text{ ml/kg}$, rounded to nearest integer and clamped `[1500, 6000] ml`.
+   - Editable custom target: `[500, 10000] ml` (or reset to `0` for auto mode).
+9. **Unit Conversion Constants**:
    - `1 kg = 2.20462262 lb`
    - `1 cm = 0.39370079 in`
    - `1 km = 0.62137119 mi`
+   - `1 ml = 0.03381402 fl oz`
 
 ---
 
-## 5. Local Room Database Schema (`fittrack_db`, v1)
+## 5. Local Room Database Schema (`fittrack_db`, v2 — Non-Destructive `MIGRATION_1_2`)
 
 | # | Table Name | Entity Class | Primary Key | Indices |
 | :-: | :--- | :--- | :--- | :--- |
-| 1 | `user_profiles` | `UserProfileEntity` | `userId` | — |
+| 1 | `user_profiles` | `UserProfileEntity` (incl. `waterTargetMl`) | `userId` | — |
 | 2 | `user_goals` | `UserGoalEntity` | `id` | `userId` |
 | 3 | `exercises` | `ExerciseEntity` | `id` | `userId` |
 | 4 | `workout_templates` | `WorkoutTemplateEntity` | `id` | `userId` |
@@ -177,10 +164,11 @@ FitTrack uses **zero AI models** — every calculation is deterministic and audi
 | 8 | `food_items` | `FoodItemEntity` | `id` | `userId` |
 | 9 | `saved_meals` | `SavedMealEntity` | `id` | `userId` |
 | 10 | `food_logs` | `FoodLogEntity` | `id` | `userId`, `dateKey` |
-| 11 | `weight_logs` | `WeightLogEntity` | `id` | `userId`, `dateKey` |
-| 12 | `body_measurements` | `BodyMeasurementEntity` | `id` | `userId`, `dateKey` |
-| 13 | `progress_photos` | `ProgressPhotoEntity` | `id` | `userId` |
-| 14 | `sync_queue` | `SyncQueueEntity` | `queueKey` | `userId` |
+| 11 | `water_logs` | `WaterLogEntity` | `id` | `userId`, `dateKey` |
+| 12 | `weight_logs` | `WeightLogEntity` | `id` | `userId`, `dateKey` |
+| 13 | `body_measurements` | `BodyMeasurementEntity` | `id` | `userId`, `dateKey` |
+| 14 | `progress_photos` | `ProgressPhotoEntity` | `id` | `userId` |
+| 15 | `sync_queue` | `SyncQueueEntity` | `queueKey` | `userId` |
 
 ---
 
@@ -192,11 +180,11 @@ FitTrack uses **zero AI models** — every calculation is deterministic and audi
 - **Zero-Trust Security Invariants (`firestore.rules`)**:
   - Default deny on all unmatched paths (`allow read, write: if false;`).
   - Strict per-user ownership: `request.auth != null && request.auth.uid == userId`.
-  - Schema & range validation helpers for all 12 collections (`isValidProfile`, `isValidGoal`, `isValidExercise`, `isValidTemplate`, `isValidWorkout`, `isValidCardio`, `isValidCustomFood`, `isValidSavedMeal`, `isValidFoodLog`, `isValidWeightLog`, `isValidMeasurement`, `isValidProgressPhoto`).
+  - Schema & range validation helpers for all 13 collections (`isValidUserProfile`, `isValidGoal`, `isValidExercise`, `isValidTemplate`, `isValidWorkout`, `isValidCardio`, `isValidCustomFood`, `isValidSavedMeal`, `isValidFoodLog`, `isValidWaterLog`, `isValidWeightLog`, `isValidMeasurement`, `isValidProgressPhoto`).
   - Immutable `createdAt` preserved on updates; `updatedAt == request.time` enforced via `FieldValue.serverTimestamp()`.
 
 ### Synced Firestore Paths
-1. `/users/{userId}` — Profile & active targets
+1. `/users/{userId}` — Profile & active targets (including optional `waterTargetMl`)
 2. `/users/{userId}/goals/{goalId}` — Historical goal snapshots
 3. `/users/{userId}/exercises/{exerciseId}` — Custom & favorite exercises
 4. `/users/{userId}/templates/{templateId}` — Workout templates
@@ -205,9 +193,10 @@ FitTrack uses **zero AI models** — every calculation is deterministic and audi
 7. `/users/{userId}/custom_foods/{foodId}` — User-defined custom foods
 8. `/users/{userId}/meals/{mealId}` — Saved multi-item meals
 9. `/users/{userId}/food_logs/{logId}` — Daily food intake logs
-10. `/users/{userId}/weight_logs/{logId}` — Body weight history
-11. `/users/{userId}/measurements/{measurementId}` — Body measurements
-12. `/users/{userId}/progress_photos/{photoId}` — Progress photo metadata only (image bytes remain private on device)
+10. `/users/{userId}/water_logs/{logId}` — Daily hydration logs (`amountMl`, `dateKey`, `loggedAtEpochMs`)
+11. `/users/{userId}/weight_logs/{logId}` — Body weight history
+12. `/users/{userId}/measurements/{measurementId}` — Body measurements
+13. `/users/{userId}/progress_photos/{photoId}` — Progress photo metadata only (image bytes remain private on device)
 
 ---
 

@@ -23,6 +23,7 @@ data class UserProfileEntity(
     val calorieTarget: Int = 2100,
     val proteinTargetG: Int = 160,
     val cardioTargetMinPerDay: Int = 20,
+    val waterTargetMl: Int = 0, // 0 = auto (35 ml/kg)
     val onboardingCompleted: Boolean = false,
     val updatedAtEpochMs: Long = System.currentTimeMillis()
 )
@@ -165,6 +166,15 @@ data class FoodLogEntity(
     val fat: Double,
     val fiber: Double,
     val mealType: String,
+    val dateKey: String,
+    val loggedAtEpochMs: Long
+)
+
+@Entity(tableName = "water_logs", indices = [Index("userId"), Index("dateKey")])
+data class WaterLogEntity(
+    @PrimaryKey val id: String,
+    val userId: String,
+    val amountMl: Int,
     val dateKey: String,
     val loggedAtEpochMs: Long
 )

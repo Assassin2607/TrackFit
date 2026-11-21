@@ -93,6 +93,7 @@ test("User profile: owner create, partial update preserving createdAt, and rejec
     aliceDb.collection("users").doc(ALICE_UID).update({
       currentWeightKg: 64.1,
       calorieTarget: 1820,
+      waterTargetMl: 2800,
       updatedAt: pastTime(1000),
     })
   );
@@ -343,6 +344,34 @@ test("Kotlin-mirrored subcollections: templates, workouts, cardio, foods, meals,
   await assertSucceeds(userDoc.collection("food_logs").get());
   await assertSucceeds(userDoc.collection("measurements").get());
   await assertSucceeds(userDoc.collection("progress_photos").get());
+
+  // Water Log
+  await assertSucceeds(
+    userDoc.collection("water_logs").doc("wl_1").set({
+      amountMl: 500,
+      dateKey: "2026-11-20",
+      loggedAtEpochMs: nowMs,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+  await assertSucceeds(userDoc.collection("water_logs").get());
+
+  // Reject out-of-range water intake
+  await assertFails(
+    userDoc.collection("water_logs").doc("wl_bad").set({
+      amountMl: 99999,
+      dateKey: "2026-11-20",
+      loggedAtEpochMs: nowMs,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+
+  // Cross-user isolation on water_logs
+  const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
+  await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("water_logs").get());
+  await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("water_logs").doc("wl_1").delete());
 
   // Reject invalid @DocumentId "id" key inside body
   await assertFails(

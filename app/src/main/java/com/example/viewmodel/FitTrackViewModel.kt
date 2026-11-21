@@ -12,6 +12,7 @@ import com.example.data.local.ProgressPhotoEntity
 import com.example.data.local.SavedMealEntity
 import com.example.data.local.UserGoalEntity
 import com.example.data.local.UserProfileEntity
+import com.example.data.local.WaterLogEntity
 import com.example.data.local.WeightLogEntity
 import com.example.data.local.WorkoutSessionEntity
 import com.example.data.local.WorkoutSetEntity
@@ -100,6 +101,12 @@ data class DailyCaloriePoint(
     val proteinG: Int
 )
 
+data class DailyWaterPoint(
+    val dateKey: String,
+    val shortLabel: String,
+    val amountMl: Int
+)
+
 data class ExercisePrSummary(
     val exerciseId: String,
     val exerciseName: String,
@@ -129,6 +136,7 @@ data class FitTrackUiState(
     val foodItems: List<FoodItemEntity> = emptyList(),
     val savedMeals: List<SavedMealEntity> = emptyList(),
     val foodLogs: List<FoodLogEntity> = emptyList(),
+    val waterLogs: List<WaterLogEntity> = emptyList(),
     val weightLogs: List<WeightLogEntity> = emptyList(),
     val measurements: List<BodyMeasurementEntity> = emptyList(),
     val progressPhotos: List<ProgressPhotoEntity> = emptyList(),
@@ -139,6 +147,10 @@ data class FitTrackUiState(
     val todayCarbsG: Int = 0,
     val todayFatG: Int = 0,
     val todayFiberG: Int = 0,
+    val todayWaterMl: Int = 0,
+    val waterTargetMl: Int = 2625,
+    val isAutoWaterTarget: Boolean = true,
+    val weeklyWaterSeries: List<DailyWaterPoint> = emptyList(),
     val targetCarbsG: Int = 220,
     val targetFatG: Int = 65,
     val targetFiberG: Int = 30,
@@ -236,7 +248,8 @@ class FitTrackViewModel(
     private data class NutritionBundle(
         val foods: List<FoodItemEntity>,
         val meals: List<SavedMealEntity>,
-        val logs: List<FoodLogEntity>
+        val logs: List<FoodLogEntity>,
+        val waterLogs: List<WaterLogEntity>
     )
 
     private data class MetricsBundle(
@@ -279,9 +292,10 @@ class FitTrackViewModel(
     private val nutritionFlow = combine(
         repository.observeFoodItems(currentUserId),
         repository.observeSavedMeals(currentUserId),
-        repository.observeFoodLogs(currentUserId)
-    ) { foods, meals, logs ->
-        NutritionBundle(foods, meals, logs)
+        repository.observeFoodLogs(currentUserId),
+        repository.observeWaterLogs(currentUserId)
+    ) { foods, meals, logs, waterLogs ->
+        NutritionBundle(foods, meals, logs, waterLogs)
     }
 
     private val metricsFlow = combine(
@@ -322,9 +336,15 @@ class FitTrackViewModel(
         val todayFat = dayFoodLogs.sumOf { it.fat }.roundToInt()
         val todayFiber = dayFoodLogs.sumOf { it.fiber }.roundToInt()
 
+        val dayWaterLogs = nutrition.waterLogs.filter { it.dateKey == dateKey }
+        val todayWaterMl = dayWaterLogs.sumOf { it.amountMl }
+
         val calorieTarget = profile?.calorieTarget ?: 2100
         val proteinTarget = profile?.proteinTargetG ?: 160
         val weightKg = profile?.currentWeightKg ?: 75.0
+        val customWaterTarget = profile?.waterTargetMl ?: 0
+        val isAutoWaterTarget = customWaterTarget !in 500..10000
+        val waterTargetMl = FitnessCalculations.resolveWaterTargetMl(customWaterTarget, weightKg)
         val (targetCarbs, targetFat, targetFiber) = FitnessCalculations.calculateMacrosForTargets(
             calorieTarget = calorieTarget,
             proteinTargetG = proteinTarget,
@@ -411,7 +431,7 @@ class FitTrackViewModel(
             FitnessCalculations.calculateGoalProgressPercent(startWeight, latestWeight, profile.goalWeightKg)
         } else 0
 
-        // Weekly calorie budget series (oldest -> today)
+        // Weekly calorie budget & hydration series (oldest -> today)
         val weeklySeries = (6 downTo 0).map { daysAgo ->
             val dk = FitnessCalculations.dateKeyDaysAgo(daysAgo)
             val logsForDay = nutrition.logs.filter { it.dateKey == dk }
@@ -420,6 +440,15 @@ class FitTrackViewModel(
                 shortLabel = dk.takeLast(2),
                 calories = logsForDay.sumOf { it.calories }.roundToInt(),
                 proteinG = logsForDay.sumOf { it.protein }.roundToInt()
+            )
+        }
+        val weeklyWaterSeries = (6 downTo 0).map { daysAgo ->
+            val dk = FitnessCalculations.dateKeyDaysAgo(daysAgo)
+            val waterForDay = nutrition.waterLogs.filter { it.dateKey == dk }.sumOf { it.amountMl }
+            DailyWaterPoint(
+                dateKey = dk,
+                shortLabel = dk.takeLast(2),
+                amountMl = waterForDay
             )
         }
         val weeklyConsumed = weeklySeries.sumOf { it.calories }
@@ -507,6 +536,7 @@ class FitTrackViewModel(
             foodItems = nutrition.foods,
             savedMeals = nutrition.meals,
             foodLogs = nutrition.logs,
+            waterLogs = nutrition.waterLogs,
             weightLogs = metrics.weights,
             measurements = metrics.measurements,
             progressPhotos = metrics.photos,
@@ -515,6 +545,10 @@ class FitTrackViewModel(
             todayCarbsG = todayCarb,
             todayFatG = todayFat,
             todayFiberG = todayFiber,
+            todayWaterMl = todayWaterMl,
+            waterTargetMl = waterTargetMl,
+            isAutoWaterTarget = isAutoWaterTarget,
+            weeklyWaterSeries = weeklyWaterSeries,
             targetCarbsG = targetCarbs,
             targetFatG = targetFat,
             targetFiberG = targetFiber,
@@ -1089,6 +1123,39 @@ class FitTrackViewModel(
     fun deleteFoodLog(logId: String) {
         viewModelScope.launch {
             repository.deleteFoodLog(currentUserId, logId)
+        }
+    }
+
+    // --- Water Log ---
+
+    fun logWater(amountMl: Int) {
+        if (amountMl !in 1..5000) {
+            postMessage("Enter a valid water amount.")
+            return
+        }
+        val unit = uiState.value.preferences.unitSystem
+        viewModelScope.launch {
+            repository.logWater(currentUserId, amountMl, uiState.value.selectedDateKey)
+            postMessage("Logged +${FitnessCalculations.formatWater(amountMl, unit)} water")
+        }
+    }
+
+    fun deleteWaterLog(logId: String) {
+        viewModelScope.launch {
+            repository.deleteWaterLog(currentUserId, logId)
+            postMessage("Water entry removed.")
+        }
+    }
+
+    fun updateWaterTargetMl(targetMl: Int) {
+        viewModelScope.launch {
+            repository.updateWaterTargetMl(currentUserId, targetMl)
+            if (targetMl == 0) {
+                postMessage("Water target reset to Auto (35 ml/kg).")
+            } else {
+                val unit = uiState.value.preferences.unitSystem
+                postMessage("Daily water target set to ${FitnessCalculations.formatWater(targetMl, unit)}.")
+            }
         }
     }
 

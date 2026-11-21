@@ -42,6 +42,7 @@ object FitnessCalculations {
     const val KG_TO_LB = 2.20462262
     const val CM_TO_IN = 0.39370079
     const val KM_TO_MI = 0.62137119
+    const val ML_TO_FL_OZ = 0.03381402
 
     /**
      * Mifflin-St Jeor BMR formula:
@@ -354,5 +355,57 @@ object FitnessCalculations {
             currentWeightKg - startWeightKg
         }
         return ((progressed / totalDistance) * 100.0).roundToInt().coerceIn(0, 100)
+    }
+
+    // --- Hydration Calculations (Deterministic: 35 ml/kg default, editable override) ---
+
+    fun calculateDefaultWaterTargetMl(weightKg: Double): Int {
+        if (weightKg <= 0.0) return 2500
+        return (weightKg * 35.0).roundToInt().coerceIn(1500, 6000)
+    }
+
+    fun resolveWaterTargetMl(customTargetMl: Int, weightKg: Double): Int {
+        return if (customTargetMl in 500..10000) {
+            customTargetMl
+        } else {
+            calculateDefaultWaterTargetMl(weightKg)
+        }
+    }
+
+    fun mlToDisplayWater(ml: Int, unitSystem: UnitSystem): Double =
+        if (unitSystem == UnitSystem.IMPERIAL) ml * ML_TO_FL_OZ else ml.toDouble()
+
+    fun displayWaterToMl(value: Double, unitSystem: UnitSystem): Int =
+        if (unitSystem == UnitSystem.IMPERIAL) (value / ML_TO_FL_OZ).roundToInt() else value.roundToInt()
+
+    fun waterUnitLabel(unitSystem: UnitSystem): String =
+        if (unitSystem == UnitSystem.IMPERIAL) "fl oz" else "ml"
+
+    fun formatWater(ml: Int, unitSystem: UnitSystem): String {
+        val safeMl = ml.coerceAtLeast(0)
+        return if (unitSystem == UnitSystem.IMPERIAL) {
+            val oz = (safeMl * ML_TO_FL_OZ).roundToInt()
+            "$oz fl oz"
+        } else {
+            if (safeMl >= 1000) {
+                String.format(Locale.US, "%.2f L", safeMl / 1000.0)
+            } else {
+                "$safeMl ml"
+            }
+        }
+    }
+
+    fun formatWaterCompact(ml: Int, unitSystem: UnitSystem): String {
+        val safeMl = ml.coerceAtLeast(0)
+        return if (unitSystem == UnitSystem.IMPERIAL) {
+            val oz = (safeMl * ML_TO_FL_OZ).roundToInt()
+            "${oz}oz"
+        } else {
+            if (safeMl >= 1000) {
+                String.format(Locale.US, "%.1fL", safeMl / 1000.0)
+            } else {
+                "${safeMl}ml"
+            }
+        }
     }
 }

@@ -218,5 +218,36 @@ class FitnessCalculationsTest {
         assertEquals(180.0, FitnessCalculations.displayToCm(inches, UnitSystem.IMPERIAL), 0.001)
         val miles = FitnessCalculations.kmToDisplay(10.0, UnitSystem.IMPERIAL)
         assertEquals(10.0, FitnessCalculations.displayToKm(miles, UnitSystem.IMPERIAL), 0.001)
+        val flOz = FitnessCalculations.mlToDisplayWater(1000, UnitSystem.IMPERIAL)
+        assertEquals(1000, FitnessCalculations.displayWaterToMl(flOz, UnitSystem.IMPERIAL))
+    }
+
+    @Test
+    fun waterTargets_follow35MlPerKgAndRespectCustomOverride() {
+        // 70 kg * 35 ml/kg = 2450 ml
+        assertEquals(2450, FitnessCalculations.calculateDefaultWaterTargetMl(70.0))
+        // 77 kg * 35 ml/kg = 2695 ml
+        assertEquals(2695, FitnessCalculations.calculateDefaultWaterTargetMl(77.0))
+        // Safety floor (1500 ml) and ceiling (6000 ml)
+        assertEquals(1500, FitnessCalculations.calculateDefaultWaterTargetMl(30.0))
+        assertEquals(6000, FitnessCalculations.calculateDefaultWaterTargetMl(200.0))
+
+        // Auto mode (customTargetMl == 0) uses weight-based formula
+        assertEquals(2695, FitnessCalculations.resolveWaterTargetMl(0, 77.0))
+        // Explicit custom target in [500, 10000] overrides auto calculation
+        assertEquals(3200, FitnessCalculations.resolveWaterTargetMl(3200, 77.0))
+        // Out-of-range custom values fall back to weight-based default
+        assertEquals(2695, FitnessCalculations.resolveWaterTargetMl(200, 77.0))
+        assertEquals(2695, FitnessCalculations.resolveWaterTargetMl(15000, 77.0))
+    }
+
+    @Test
+    fun waterFormatting_supportsMetricAndImperial() {
+        assertEquals("2.50 L", FitnessCalculations.formatWater(2500, UnitSystem.METRIC))
+        assertEquals("750 ml", FitnessCalculations.formatWater(750, UnitSystem.METRIC))
+        assertEquals("2.5L", FitnessCalculations.formatWaterCompact(2500, UnitSystem.METRIC))
+        assertEquals("750ml", FitnessCalculations.formatWaterCompact(750, UnitSystem.METRIC))
+        assertTrue(FitnessCalculations.formatWater(1000, UnitSystem.IMPERIAL).endsWith("fl oz"))
+        assertTrue(FitnessCalculations.formatWaterCompact(1000, UnitSystem.IMPERIAL).endsWith("oz"))
     }
 }

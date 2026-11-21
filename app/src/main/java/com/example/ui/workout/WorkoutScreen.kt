@@ -1,6 +1,9 @@
 package com.example.ui.workout
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
@@ -29,6 +33,7 @@ import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -40,6 +45,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -50,6 +56,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -67,6 +76,11 @@ import com.example.ui.components.SectionHeader
 import com.example.ui.theme.FitTrackThemeExt
 import com.example.ui.theme.MonoMetricMedium
 import com.example.ui.theme.MonoMetricSmall
+import com.example.ui.theme.WorkoutCrimson
+import com.example.ui.theme.WorkoutCrimsonBright
+import com.example.ui.theme.WorkoutRoyalBlue
+import com.example.ui.theme.WorkoutRoyalBlueBright
+import com.example.ui.theme.WorkoutRoyalBlueGlow
 import com.example.viewmodel.FitTrackUiState
 
 @Composable
@@ -85,6 +99,7 @@ fun WorkoutScreen(
     var selectedSegment by remember { mutableIntStateOf(0) }
     val segments = listOf("Templates", "Cardio", "Exercises", "History")
     val unit = state.preferences.unitSystem
+    val ext = FitTrackThemeExt.colors
 
     var showCreateTemplate by remember { mutableStateOf(false) }
     var showCreateExercise by remember { mutableStateOf(false) }
@@ -96,28 +111,125 @@ fun WorkoutScreen(
             .fillMaxSize()
             .testTag("workout_screen")
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Training", style = MaterialTheme.typography.headlineMedium)
-                FilledTonalButton(
+                Column {
+                    Text(
+                        text = "Training Studio",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = "${state.workoutsThisWeek} / ${state.profile?.trainingDaysPerWeek ?: 4} sessions this week",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ext.mutedText
+                    )
+                }
+                Button(
                     onClick = onOpenCardioDialog,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = WorkoutRoyalBlue,
+                        contentColor = Color.White
+                    ),
                     modifier = Modifier.testTag("workout_quick_cardio_button")
                 ) {
                     Icon(Icons.Rounded.DirectionsRun, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Log Cardio")
+                    Text("Cardio")
                 }
             }
-            Spacer(modifier = Modifier.height(10.dp))
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Dual-Tone Athletic 3D Split Command Bar (Crimson #701A1F + Royal Blue #1E3A8A)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                FitTrackCard(
+                    containerColor = WorkoutCrimson,
+                    accentGradientEnd = Color(0xFF471015),
+                    borderColor = WorkoutCrimsonBright,
+                    depthElevation = 5.dp,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Rounded.FitnessCenter,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "7-DAY VOLUME",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.8f),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = FitnessCalculations.formatVolume(state.weeklyVolumeKg, unit),
+                        style = MonoMetricMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                FitTrackCard(
+                    containerColor = WorkoutRoyalBlue,
+                    accentGradientEnd = Color(0xFF122354),
+                    borderColor = WorkoutRoyalBlueBright,
+                    depthElevation = 5.dp,
+                    onClick = onOpenCardioDialog,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Rounded.DirectionsRun,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "TODAY CARDIO",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.82f),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "${state.todayCardioMinutes} / ${state.profile?.cardioTargetMinPerDay ?: 20}m",
+                        style = MonoMetricMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                 segments.forEachIndexed { idx, label ->
                     SegmentedButton(
                         selected = selectedSegment == idx,
                         onClick = { selectedSegment = idx },
+                        colors = SegmentedButtonDefaults.colors(
+                            activeContainerColor = if (idx % 2 == 0) WorkoutCrimson else WorkoutRoyalBlue,
+                            activeContentColor = Color.White,
+                            inactiveContainerColor = Color(0xFF1D1017),
+                            inactiveContentColor = ext.mutedText,
+                            activeBorderColor = if (idx % 2 == 0) WorkoutCrimsonBright else WorkoutRoyalBlueBright,
+                            inactiveBorderColor = MaterialTheme.colorScheme.outline
+                        ),
                         shape = SegmentedButtonDefaults.itemShape(index = idx, count = segments.size)
                     ) {
                         Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
@@ -128,7 +240,7 @@ fun WorkoutScreen(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             when (selectedSegment) {
@@ -138,8 +250,13 @@ fun WorkoutScreen(
                             title = "Workout Templates",
                             subtitle = "One-tap launch with previous weights & reps pre-loaded",
                             trailing = {
-                                FilledTonalButton(
+                                Button(
                                     onClick = { showCreateTemplate = true },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = WorkoutRoyalBlue,
+                                        contentColor = Color.White
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                                     modifier = Modifier.testTag("create_template_button")
                                 ) {
                                     Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -165,19 +282,55 @@ fun WorkoutScreen(
                             val exercises = remember(template.exercisesJson) {
                                 SeedSerialization.decodeTemplateExercises(template.exercisesJson)
                             }
-                            FitTrackCard(modifier = Modifier.testTag("template_card_${template.id}")) {
+                            FitTrackCard(
+                                depthElevation = 6.dp,
+                                modifier = Modifier.testTag("template_card_${template.id}")
+                            ) {
+                                // Crimson-to-Royal-Blue sculpted 3D energy accent bar
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(4.dp)
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .background(
+                                            Brush.horizontalGradient(
+                                                listOf(WorkoutCrimsonBright, WorkoutRoyalBlueBright)
+                                            )
+                                        )
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(template.name, style = MaterialTheme.typography.titleLarge)
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = template.name,
+                                                style = MaterialTheme.typography.titleLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = WorkoutRoyalBlue.copy(alpha = 0.85f),
+                                                border = BorderStroke(1.dp, WorkoutRoyalBlueGlow.copy(alpha = 0.5f))
+                                            ) {
+                                                Text(
+                                                    text = "${exercises.size} ex",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = Color.White,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
                                         if (template.description.isNotBlank()) {
                                             Text(
                                                 template.description,
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = FitTrackThemeExt.colors.mutedText
+                                                color = ext.mutedText
                                             )
                                         }
                                     }
@@ -185,7 +338,7 @@ fun WorkoutScreen(
                                         Icon(
                                             Icons.Rounded.Delete,
                                             contentDescription = "Delete template",
-                                            tint = FitTrackThemeExt.colors.mutedText
+                                            tint = ext.mutedText
                                         )
                                     }
                                 }
@@ -201,12 +354,16 @@ fun WorkoutScreen(
                                     Text(
                                         text = "+ ${exercises.size - 5} more exercises",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = FitTrackThemeExt.colors.mutedText
+                                        color = WorkoutRoyalBlueGlow
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Button(
                                     onClick = { onStartTemplate(template) },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = WorkoutCrimson,
+                                        contentColor = Color.White
+                                    ),
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(48.dp)
@@ -214,7 +371,7 @@ fun WorkoutScreen(
                                 ) {
                                     Icon(Icons.Rounded.PlayArrow, contentDescription = null)
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Start ${template.name}")
+                                    Text("Start ${template.name}", fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -223,21 +380,33 @@ fun WorkoutScreen(
 
                 1 -> { // Cardio
                     item {
-                        FitTrackCard {
+                        FitTrackCard(
+                            containerColor = WorkoutRoyalBlue,
+                            accentGradientEnd = Color(0xFF10204F),
+                            borderColor = WorkoutRoyalBlueGlow.copy(alpha = 0.65f),
+                            depthElevation = 6.dp
+                        ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column {
-                                    Text("Today's Cardio", style = MaterialTheme.typography.labelMedium, color = FitTrackThemeExt.colors.mutedText)
+                                    Text("Today's Cardio", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.8f))
                                     Text(
                                         text = "${state.todayCardioMinutes} / ${state.profile?.cardioTargetMinPerDay ?: 20} min",
                                         style = MonoMetricMedium,
-                                        color = FitTrackThemeExt.colors.cardioAccent
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
-                                Button(onClick = onOpenCardioDialog) {
+                                Button(
+                                    onClick = onOpenCardioDialog,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = WorkoutCrimson,
+                                        contentColor = Color.White
+                                    )
+                                ) {
                                     Icon(Icons.Rounded.Add, contentDescription = null)
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text("Log Session")
@@ -265,7 +434,7 @@ fun WorkoutScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text("${act.label} • ${session.dateKey}", style = MaterialTheme.typography.titleMedium)
+                                        Text("${act.label} • ${session.dateKey}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                                         val details = buildList {
                                             add("${session.durationMinutes} min")
                                             if (session.distanceKm > 0) add(FitnessCalculations.formatDistance(session.distanceKm, unit))
@@ -273,14 +442,14 @@ fun WorkoutScreen(
                                             if (session.resistanceLevel > 0) add("Lvl ${session.resistanceLevel}")
                                             add("~${session.caloriesEstimated} kcal est.")
                                         }.joinToString(" • ")
-                                        Text(details, style = MaterialTheme.typography.bodySmall, color = FitTrackThemeExt.colors.mutedText)
+                                        Text(details, style = MaterialTheme.typography.bodySmall, color = ext.mutedText)
                                     }
                                     Row {
                                         IconButton(onClick = { onRepeatCardio(session) }) {
-                                            Icon(Icons.Rounded.Replay, contentDescription = "Repeat cardio", tint = MaterialTheme.colorScheme.primary)
+                                            Icon(Icons.Rounded.Replay, contentDescription = "Repeat cardio", tint = WorkoutRoyalBlueGlow)
                                         }
                                         IconButton(onClick = { onDeleteCardio(session.id) }) {
-                                            Icon(Icons.Rounded.Delete, contentDescription = "Delete cardio", tint = FitTrackThemeExt.colors.mutedText)
+                                            Icon(Icons.Rounded.Delete, contentDescription = "Delete cardio", tint = ext.mutedText)
                                         }
                                     }
                                 }
@@ -303,7 +472,13 @@ fun WorkoutScreen(
                                 singleLine = true,
                                 modifier = Modifier.weight(1f)
                             )
-                            FilledTonalButton(onClick = { showCreateExercise = true }) {
+                            Button(
+                                onClick = { showCreateExercise = true },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = WorkoutCrimson,
+                                    contentColor = Color.White
+                                )
+                            ) {
                                 Icon(Icons.Rounded.Add, contentDescription = "Add custom exercise")
                             }
                         }
@@ -343,14 +518,14 @@ fun WorkoutScreen(
                                     Text(
                                         text = "${MuscleGroup.fromNameSafe(ex.muscleGroup).label} • ${ex.equipment} • ${ex.difficulty}",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.primary
+                                        color = WorkoutRoyalBlueGlow
                                     )
                                     if (ex.instructions.isNotBlank()) {
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
                                             text = ex.instructions,
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = FitTrackThemeExt.colors.mutedText
+                                            color = ext.mutedText
                                         )
                                     }
                                 }
@@ -358,7 +533,7 @@ fun WorkoutScreen(
                                     Icon(
                                         imageVector = if (ex.favorite) Icons.Rounded.Star else Icons.Rounded.StarBorder,
                                         contentDescription = "Favorite exercise",
-                                        tint = if (ex.favorite) FitTrackThemeExt.colors.warning else FitTrackThemeExt.colors.mutedText
+                                        tint = if (ex.favorite) ext.warning else ext.mutedText
                                     )
                                 }
                             }
@@ -368,8 +543,13 @@ fun WorkoutScreen(
 
                 3 -> { // History & Volume
                     item {
-                        FitTrackCard {
-                            Text("Strength Volume Summary", style = MaterialTheme.typography.titleMedium)
+                        FitTrackCard(
+                            containerColor = WorkoutCrimson,
+                            accentGradientEnd = WorkoutRoyalBlue,
+                            borderColor = WorkoutRoyalBlueGlow.copy(alpha = 0.55f),
+                            depthElevation = 6.dp
+                        ) {
+                            Text("Strength Volume Summary", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
                             Spacer(modifier = Modifier.height(10.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -399,11 +579,11 @@ fun WorkoutScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(session.templateName, style = MaterialTheme.typography.titleMedium)
+                                        Text(session.templateName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                                         Text(
                                             text = "${session.dateKey} • ${session.durationMinutes} min • ${FitnessCalculations.formatVolume(session.totalVolumeKg, unit)} • ~${session.estimatedCalories} kcal est.",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = FitTrackThemeExt.colors.mutedText
+                                            color = ext.mutedText
                                         )
                                         if (session.prCount > 0) {
                                             Spacer(modifier = Modifier.height(4.dp))
@@ -411,20 +591,20 @@ fun WorkoutScreen(
                                                 Icon(
                                                     Icons.Rounded.EmojiEvents,
                                                     contentDescription = null,
-                                                    tint = FitTrackThemeExt.colors.success,
+                                                    tint = ext.success,
                                                     modifier = Modifier.size(16.dp)
                                                 )
                                                 Spacer(modifier = Modifier.width(4.dp))
                                                 Text(
                                                     "${session.prCount} Personal Record${if (session.prCount > 1) "s" else ""}",
                                                     style = MaterialTheme.typography.labelSmall,
-                                                    color = FitTrackThemeExt.colors.success
+                                                    color = ext.success
                                                 )
                                             }
                                         }
                                     }
                                     IconButton(onClick = { onDeleteWorkoutSession(session.id) }) {
-                                        Icon(Icons.Rounded.Delete, contentDescription = "Delete workout", tint = FitTrackThemeExt.colors.mutedText)
+                                        Icon(Icons.Rounded.Delete, contentDescription = "Delete workout", tint = ext.mutedText)
                                     }
                                 }
                             }
@@ -461,8 +641,8 @@ fun WorkoutScreen(
 @Composable
 private fun VolumeStat(label: String, value: String) {
     Column {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = FitTrackThemeExt.colors.mutedText)
-        Text(value, style = MonoMetricSmall, color = MaterialTheme.colorScheme.onSurface)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.78f))
+        Text(value, style = MonoMetricSmall, color = Color.White, fontWeight = FontWeight.Bold)
     }
 }
 

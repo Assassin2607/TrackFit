@@ -190,6 +190,21 @@ interface NutritionDao {
 
     @Query("DELETE FROM food_logs WHERE userId = :userId")
     suspend fun deleteFoodLogsForUser(userId: String)
+
+    @Query("SELECT * FROM water_logs WHERE userId = :userId ORDER BY loggedAtEpochMs DESC")
+    fun observeWaterLogs(userId: String): Flow<List<WaterLogEntity>>
+
+    @Query("SELECT * FROM water_logs WHERE userId = :userId AND id = :id LIMIT 1")
+    suspend fun getWaterLogById(userId: String, id: String): WaterLogEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertWaterLog(log: WaterLogEntity)
+
+    @Query("DELETE FROM water_logs WHERE userId = :userId AND id = :id")
+    suspend fun deleteWaterLog(userId: String, id: String)
+
+    @Query("DELETE FROM water_logs WHERE userId = :userId")
+    suspend fun deleteWaterLogsForUser(userId: String)
 }
 
 @Dao

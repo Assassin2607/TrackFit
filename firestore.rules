@@ -59,6 +59,7 @@ service cloud.firestore {
              data.calorieTarget is int && data.calorieTarget >= 1000 && data.calorieTarget <= 8000 &&
              data.proteinTargetG is int && data.proteinTargetG >= 30 && data.proteinTargetG <= 450 &&
              data.cardioTargetMinPerDay is int && data.cardioTargetMinPerDay >= 0 && data.cardioTargetMinPerDay <= 300 &&
+             (!('waterTargetMl' in data) || (data.waterTargetMl is int && (data.waterTargetMl == 0 || (data.waterTargetMl >= 500 && data.waterTargetMl <= 10000)))) &&
              (!('unitSystem' in data) || (data.unitSystem is string && data.unitSystem in ['METRIC', 'IMPERIAL'])) &&
              data.onboardingCompleted is bool &&
              isValidTimestamp(data.updatedAt);
@@ -168,6 +169,13 @@ service cloud.firestore {
              isValidTimestamp(data.updatedAt);
     }
 
+    function isValidWaterLog(data) {
+      return data.amountMl is int && data.amountMl >= 1 && data.amountMl <= 5000 &&
+             isValidDateKey(data.dateKey) &&
+             data.loggedAtEpochMs is int && data.loggedAtEpochMs > 0 &&
+             isValidTimestamp(data.updatedAt);
+    }
+
     function isValidWeightLog(data) {
       return isNumber(data.weightKg) && data.weightKg >= 25 && data.weightKg <= 350 &&
              isValidDateKey(data.dateKey) &&
@@ -214,7 +222,7 @@ service cloud.firestore {
           'userId', 'name', 'email', 'age', 'gender', 'heightCm', 'currentWeightKg',
           'goalWeightKg', 'goalType', 'activityLevel', 'trainingDaysPerWeek',
           'preferredSplit', 'targetRateKgPerWeek', 'calorieTarget', 'proteinTargetG',
-          'cardioTargetMinPerDay', 'unitSystem', 'onboardingCompleted', 'createdAt', 'updatedAt'
+          'cardioTargetMinPerDay', 'waterTargetMl', 'unitSystem', 'onboardingCompleted', 'createdAt', 'updatedAt'
         ]) &&
         isValidTimestamp(incoming().createdAt) &&
         isValidUserProfile(incoming(), userId);
@@ -227,7 +235,7 @@ service cloud.firestore {
           'name', 'email', 'age', 'gender', 'heightCm', 'currentWeightKg',
           'goalWeightKg', 'goalType', 'activityLevel', 'trainingDaysPerWeek',
           'preferredSplit', 'targetRateKgPerWeek', 'calorieTarget', 'proteinTargetG',
-          'cardioTargetMinPerDay', 'unitSystem', 'onboardingCompleted', 'updatedAt'
+          'cardioTargetMinPerDay', 'waterTargetMl', 'unitSystem', 'onboardingCompleted', 'updatedAt'
         ]);
 
       allow delete: if isOwner(userId) && isValidId(userId);
@@ -441,6 +449,25 @@ service cloud.firestore {
             'foodName', 'foodItemId', 'mealId', 'quantity', 'unit', 'calories', 'protein',
             'carbs', 'fat', 'fiber', 'mealType', 'dateKey', 'loggedAtEpochMs', 'updatedAt'
           ]);
+
+        allow delete: if isOwner(userId) && isValidId(logId);
+      }
+
+      // Water Logs
+      match /water_logs/{logId} {
+        allow get: if isOwner(userId) && isValidId(logId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) && isValidId(logId) &&
+          incoming().keys().hasAll(['amountMl', 'dateKey', 'loggedAtEpochMs', 'createdAt', 'updatedAt']) &&
+          incoming().keys().hasOnly(['amountMl', 'dateKey', 'loggedAtEpochMs', 'createdAt', 'updatedAt']) &&
+          isValidTimestamp(incoming().createdAt) &&
+          isValidWaterLog(incoming());
+
+        allow update: if isOwner(userId) && isValidId(logId) &&
+          isValidWaterLog(incoming()) &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['amountMl', 'dateKey', 'loggedAtEpochMs', 'updatedAt']);
 
         allow delete: if isOwner(userId) && isValidId(logId);
       }

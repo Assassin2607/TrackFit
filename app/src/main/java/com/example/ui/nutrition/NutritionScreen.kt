@@ -18,12 +18,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Fastfood
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Restaurant
@@ -31,11 +33,14 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +52,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
@@ -57,24 +63,36 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.data.local.FoodItemEntity
 import com.example.data.local.SavedMealEntity
+import com.example.data.local.WaterLogEntity
 import com.example.data.seed.SavedMealItemSpec
+import com.example.domain.calc.FitnessCalculations
 import com.example.domain.calc.NutritionCoachingSeverity
 import com.example.domain.model.MealType
+import com.example.domain.model.UnitSystem
 import com.example.ui.components.EmptyStateCard
 import com.example.ui.components.FitTrackCard
+import com.example.ui.components.Hydration3DRing
 import com.example.ui.components.MacroProgressBar
 import com.example.ui.components.MetricBarChart
 import com.example.ui.components.SectionHeader
 import com.example.ui.theme.FitTrackThemeExt
 import com.example.ui.theme.MonoMetricMedium
 import com.example.ui.theme.MonoMetricSmall
+import com.example.ui.theme.NutritionAqua
+import com.example.ui.theme.NutritionForestDark
+import com.example.ui.theme.NutritionLime
+import com.example.ui.theme.NutritionSageBg
 import com.example.viewmodel.FitTrackUiState
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.roundToInt
 
 @Composable
@@ -86,7 +104,10 @@ fun NutritionScreen(
     onSaveMealPreset: (String, MealType, List<SavedMealItemSpec>) -> Unit,
     onLogSavedMeal: (SavedMealEntity, Double, MealType?) -> Unit,
     onDeleteSavedMeal: (String) -> Unit,
-    onDeleteFoodLog: (String) -> Unit
+    onDeleteFoodLog: (String) -> Unit,
+    onLogWater: (Int) -> Unit,
+    onDeleteWaterLog: (String) -> Unit,
+    onUpdateWaterTargetMl: (Int) -> Unit
 ) {
     var selectedSegment by remember { mutableIntStateOf(0) }
     val segments = listOf("Diary", "Favorites", "Meals", "Foods")
@@ -96,13 +117,20 @@ fun NutritionScreen(
     var mealToLog by remember { mutableStateOf<SavedMealEntity?>(null) }
     var showCreateCustomFood by remember { mutableStateOf(false) }
     var showCreateSavedMeal by remember { mutableStateOf(false) }
+    var showCustomWaterDialog by remember { mutableStateOf(false) }
+    var showEditWaterTargetDialog by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
 
     val profile = state.profile
+    val unit = state.preferences.unitSystem
+    val ext = FitTrackThemeExt.colors
     val calTarget = profile?.calorieTarget ?: 2100
     val proTarget = profile?.proteinTargetG ?: 160
     val todayLogs = remember(state.foodLogs, state.selectedDateKey) {
         state.foodLogs.filter { it.dateKey == state.selectedDateKey }
+    }
+    val todayWaterLogs = remember(state.waterLogs, state.selectedDateKey) {
+        state.waterLogs.filter { it.dateKey == state.selectedDateKey }
     }
 
     Column(
@@ -116,9 +144,21 @@ fun NutritionScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Nutrition", style = MaterialTheme.typography.headlineMedium)
+                Column {
+                    Text(
+                        text = "Nutrition",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = "Macros & Daily Hydration • ${state.selectedDateKey}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ext.mutedText
+                    )
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Weekly", style = MaterialTheme.typography.labelMedium, color = FitTrackThemeExt.colors.mutedText)
+                    Text("Weekly", style = MaterialTheme.typography.labelMedium, color = ext.mutedText)
                     Spacer(modifier = Modifier.width(6.dp))
                     Switch(
                         checked = showWeeklyBudget,
@@ -127,15 +167,23 @@ fun NutritionScreen(
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                 segments.forEachIndexed { idx, label ->
                     SegmentedButton(
                         selected = selectedSegment == idx,
                         onClick = { selectedSegment = idx },
+                        colors = SegmentedButtonDefaults.colors(
+                            activeContainerColor = NutritionLime,
+                            activeContentColor = NutritionForestDark,
+                            inactiveContainerColor = Color(0xFFF5FAF0),
+                            inactiveContentColor = ext.mutedText,
+                            activeBorderColor = MaterialTheme.colorScheme.primary,
+                            inactiveBorderColor = MaterialTheme.colorScheme.outline
+                        ),
                         shape = SegmentedButtonDefaults.itemShape(index = idx, count = segments.size)
                     ) {
-                        Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                        Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
                 }
             }
@@ -144,11 +192,11 @@ fun NutritionScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Daily Macro Summary Card
+            // Daily Macro Summary 3D Botanical Card
             item {
-                FitTrackCard {
+                FitTrackCard(depthElevation = 6.dp) {
                     MacroProgressBar(
                         label = "Calories",
                         consumed = state.todayCalories,
@@ -162,18 +210,33 @@ fun NutritionScreen(
                         consumed = state.todayProteinG,
                         target = proTarget,
                         unit = "g",
-                        accentColor = FitTrackThemeExt.colors.success
+                        accentColor = ext.success
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        MacroPill("Carbs", "${state.todayCarbsG}/${state.targetCarbsG}g")
-                        MacroPill("Fat", "${state.todayFatG}/${state.targetFatG}g")
-                        MacroPill("Fiber", "${state.todayFiberG}/${state.targetFiberG}g")
+                        MacroPill("Carbs", "${state.todayCarbsG}/${state.targetCarbsG}g", Modifier.weight(1f))
+                        MacroPill("Fat", "${state.todayFatG}/${state.targetFatG}g", Modifier.weight(1f))
+                        MacroPill("Fiber", "${state.todayFiberG}/${state.targetFiberG}g", Modifier.weight(1f))
                     }
                 }
+            }
+
+            // Dedicated 3D Water Log Card (Botanical Lime Accent + Aqua Hydration Ring)
+            item {
+                WaterLogCard(
+                    todayWaterMl = state.todayWaterMl,
+                    waterTargetMl = state.waterTargetMl,
+                    isAutoTarget = state.isAutoWaterTarget,
+                    unitSystem = unit,
+                    todayEntries = todayWaterLogs,
+                    onQuickAdd = onLogWater,
+                    onOpenCustom = { showCustomWaterDialog = true },
+                    onOpenEditTarget = { showEditWaterTargetDialog = true },
+                    onDeleteEntry = onDeleteWaterLog
+                )
             }
 
             // Optional Weekly Calorie Budget View
@@ -187,23 +250,24 @@ fun NutritionScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text("7-Day Calorie Budget", style = MaterialTheme.typography.titleMedium)
+                                Text("7-Day Calorie Budget", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                 Text(
                                     text = "Flexible distribution across the week",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = FitTrackThemeExt.colors.mutedText
+                                    color = ext.mutedText
                                 )
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(
                                     text = "${state.weeklyCalorieConsumed} / ${state.weeklyCalorieTarget}",
                                     style = MonoMetricSmall,
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
                                 )
                                 Text(
                                     text = if (weeklyRemaining >= 0) "$weeklyRemaining kcal remaining" else "+${-weeklyRemaining} kcal over",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = FitTrackThemeExt.colors.mutedText
+                                    color = ext.mutedText
                                 )
                             }
                         }
@@ -211,22 +275,23 @@ fun NutritionScreen(
                         MetricBarChart(
                             bars = state.weeklyCaloriesSeries.map { it.shortLabel to it.calories.toFloat() },
                             targetValue = calTarget.toFloat(),
-                            barColor = MaterialTheme.colorScheme.primary
+                            barColor = MaterialTheme.colorScheme.primary,
+                            unitSuffix = " kcal"
                         )
                     }
                 }
             }
 
-            // Compassionate Non-Punitive Coaching Card (Excess / Under-Eating / Bulk / Maintain)
+            // Compassionate Non-Punitive Coaching Card
             state.nutritionCoaching?.let { coach ->
                 item {
                     val accent = when (coach.severity) {
-                        NutritionCoachingSeverity.POSITIVE -> FitTrackThemeExt.colors.success
+                        NutritionCoachingSeverity.POSITIVE -> ext.success
                         NutritionCoachingSeverity.INFO -> MaterialTheme.colorScheme.primary
-                        NutritionCoachingSeverity.WARNING -> FitTrackThemeExt.colors.warning
+                        NutritionCoachingSeverity.WARNING -> ext.warning
                         NutritionCoachingSeverity.SAFETY_ALERT -> MaterialTheme.colorScheme.error
                     }
-                    FitTrackCard(borderColor = accent.copy(alpha = 0.6f)) {
+                    FitTrackCard(borderColor = accent.copy(alpha = 0.65f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = if (coach.severity == NutritionCoachingSeverity.SAFETY_ALERT || coach.severity == NutritionCoachingSeverity.WARNING) {
@@ -236,7 +301,7 @@ fun NutritionScreen(
                                 tint = accent
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(coach.title, style = MaterialTheme.typography.titleSmall, color = accent, fontWeight = FontWeight.SemiBold)
+                            Text(coach.title, style = MaterialTheme.typography.titleSmall, color = accent, fontWeight = FontWeight.Bold)
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(coach.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
@@ -245,7 +310,7 @@ fun NutritionScreen(
                             Text(
                                 text = "${idx + 1}. $opt",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = FitTrackThemeExt.colors.mutedText,
+                                color = ext.mutedText,
                                 modifier = Modifier.padding(vertical = 2.dp)
                             )
                         }
@@ -260,7 +325,7 @@ fun NutritionScreen(
                             title = "Today's Food Log",
                             subtitle = "${todayLogs.size} entries logged",
                             trailing = {
-                                FilledTonalButton(
+                                Button(
                                     onClick = { selectedSegment = 3 },
                                     modifier = Modifier.testTag("diary_add_food_button")
                                 ) {
@@ -290,21 +355,22 @@ fun NutritionScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(log.foodName, style = MaterialTheme.typography.titleSmall)
+                                        Text(log.foodName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                                         Text(
                                             text = "${MealType.fromNameSafe(log.mealType).label} • ${String.format("%.0f", log.quantity)} ${log.unit}",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = FitTrackThemeExt.colors.mutedText
+                                            color = ext.mutedText
                                         )
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
                                             text = "${log.calories.roundToInt()} kcal • P ${log.protein.roundToInt()}g • C ${log.carbs.roundToInt()}g • F ${log.fat.roundToInt()}g",
                                             style = MonoMetricSmall,
-                                            color = MaterialTheme.colorScheme.primary
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.SemiBold
                                         )
                                     }
                                     IconButton(onClick = { onDeleteFoodLog(log.id) }) {
-                                        Icon(Icons.Rounded.Delete, contentDescription = "Delete log", tint = FitTrackThemeExt.colors.mutedText)
+                                        Icon(Icons.Rounded.Delete, contentDescription = "Delete log", tint = ext.mutedText)
                                     }
                                 }
                             }
@@ -335,7 +401,7 @@ fun NutritionScreen(
                             title = "Saved Meals",
                             subtitle = "Log multi-ingredient meals in one tap",
                             trailing = {
-                                FilledTonalButton(
+                                Button(
                                     onClick = { showCreateSavedMeal = true },
                                     modifier = Modifier.testTag("create_saved_meal_button")
                                 ) {
@@ -365,15 +431,15 @@ fun NutritionScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(meal.name, style = MaterialTheme.typography.titleMedium)
+                                        Text(meal.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                                         Text(
                                             text = "${MealType.fromNameSafe(meal.mealType).label} • ${meal.totalCalories.roundToInt()} kcal • ${meal.totalProtein.roundToInt()}g P • ${meal.totalCarbs.roundToInt()}g C • ${meal.totalFat.roundToInt()}g F",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = FitTrackThemeExt.colors.mutedText
+                                            color = ext.mutedText
                                         )
                                     }
                                     IconButton(onClick = { onDeleteSavedMeal(meal.id) }) {
-                                        Icon(Icons.Rounded.Delete, contentDescription = "Delete saved meal", tint = FitTrackThemeExt.colors.mutedText)
+                                        Icon(Icons.Rounded.Delete, contentDescription = "Delete saved meal", tint = ext.mutedText)
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(10.dp))
@@ -413,7 +479,7 @@ fun NutritionScreen(
                                     .weight(1f)
                                     .testTag("food_search_input")
                             )
-                            FilledTonalButton(
+                            Button(
                                 onClick = { showCreateCustomFood = true },
                                 modifier = Modifier.testTag("create_custom_food_button")
                             ) {
@@ -453,6 +519,30 @@ fun NutritionScreen(
         }
     }
 
+    if (showCustomWaterDialog) {
+        CustomWaterDialog(
+            unitSystem = unit,
+            onDismiss = { showCustomWaterDialog = false },
+            onConfirm = { amountMl ->
+                onLogWater(amountMl)
+                showCustomWaterDialog = false
+            }
+        )
+    }
+
+    if (showEditWaterTargetDialog) {
+        EditWaterTargetDialog(
+            currentTargetMl = state.waterTargetMl,
+            autoTargetMl = FitnessCalculations.calculateDefaultWaterTargetMl(profile?.currentWeightKg ?: 75.0),
+            unitSystem = unit,
+            onDismiss = { showEditWaterTargetDialog = false },
+            onSaveTarget = { targetMl ->
+                onUpdateWaterTargetMl(targetMl)
+                showEditWaterTargetDialog = false
+            }
+        )
+    }
+
     foodToLog?.let { food ->
         LogFoodPortionDialog(
             food = food,
@@ -478,8 +568,8 @@ fun NutritionScreen(
     if (showCreateCustomFood) {
         CreateCustomFoodDialog(
             onDismiss = { showCreateCustomFood = false },
-            onSave = { name, brand, serving, unit, kcal, p, c, f, fib, logMeal ->
-                onCreateCustomFood(name, brand, serving, unit, kcal, p, c, f, fib, logMeal)
+            onSave = { name, brand, serving, u, kcal, p, c, f, fib, logMeal ->
+                onCreateCustomFood(name, brand, serving, u, kcal, p, c, f, fib, logMeal)
                 showCreateCustomFood = false
             }
         )
@@ -498,18 +588,321 @@ fun NutritionScreen(
 }
 
 @Composable
-private fun MacroPill(label: String, value: String) {
+private fun WaterLogCard(
+    todayWaterMl: Int,
+    waterTargetMl: Int,
+    isAutoTarget: Boolean,
+    unitSystem: UnitSystem,
+    todayEntries: List<WaterLogEntity>,
+    onQuickAdd: (Int) -> Unit,
+    onOpenCustom: () -> Unit,
+    onOpenEditTarget: () -> Unit,
+    onDeleteEntry: (String) -> Unit
+) {
+    val ext = FitTrackThemeExt.colors
+    val remainingMl = (waterTargetMl - todayWaterMl).coerceAtLeast(0)
+    val quick250Label = if (unitSystem == UnitSystem.IMPERIAL) "+8 oz" else "+250 ml"
+    val quick500Label = if (unitSystem == UnitSystem.IMPERIAL) "+17 oz" else "+500 ml"
+    val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.US) }
+
+    FitTrackCard(
+        containerColor = Color(0xFFF6FBF1),
+        accentGradientEnd = NutritionSageBg,
+        borderColor = NutritionLime,
+        depthElevation = 6.dp,
+        modifier = Modifier.testTag("water_log_card")
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = NutritionLime,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.WaterDrop,
+                        contentDescription = null,
+                        tint = NutritionAqua,
+                        modifier = Modifier
+                            .padding(7.dp)
+                            .size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = "Water Log",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = NutritionForestDark
+                    )
+                    Text(
+                        text = if (isAutoTarget) "Auto target (35 ml/kg)" else "Custom daily target",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ext.mutedText
+                    )
+                }
+            }
+            IconButton(
+                onClick = onOpenEditTarget,
+                modifier = Modifier.testTag("edit_water_target_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Edit,
+                    contentDescription = "Edit daily water target",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Hydration3DRing(
+                consumedMl = todayWaterMl,
+                targetMl = waterTargetMl,
+                compactLabel = FitnessCalculations.formatWaterCompact(todayWaterMl, unitSystem),
+                size = 104.dp
+            )
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "${FitnessCalculations.formatWater(todayWaterMl, unitSystem)} / ${FitnessCalculations.formatWater(waterTargetMl, unitSystem)}",
+                    style = MonoMetricMedium,
+                    color = NutritionForestDark,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = if (remainingMl == 0) {
+                        "Daily hydration goal reached!"
+                    } else {
+                        "${FitnessCalculations.formatWater(remainingMl, unitSystem)} remaining today"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (remainingMl == 0) ext.success else ext.mutedText,
+                    fontWeight = if (remainingMl == 0) FontWeight.SemiBold else FontWeight.Normal
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Button(
+                        onClick = { onQuickAdd(250) },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = NutritionLime,
+                            contentColor = NutritionForestDark
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("nutrition_water_add_250")
+                    ) {
+                        Text(quick250Label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
+                    Button(
+                        onClick = { onQuickAdd(500) },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = NutritionAqua,
+                            contentColor = Color.White
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("nutrition_water_add_500")
+                    ) {
+                        Text(quick500Label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedButton(
+                    onClick = onOpenCustom,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(34.dp)
+                        .testTag("nutrition_water_add_custom")
+                ) {
+                    Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Custom Amount", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+
+        if (todayEntries.isNotEmpty()) {
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 10.dp),
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+            )
+            Text(
+                text = "Today's Water Entries (${todayEntries.size})",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = ext.mutedText
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                todayEntries.take(5).forEach { entry ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Rounded.WaterDrop,
+                                contentDescription = null,
+                                tint = NutritionAqua,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "+${FitnessCalculations.formatWater(entry.amountMl, unitSystem)}",
+                                style = MonoMetricSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = NutritionForestDark
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = timeFormatter.format(Date(entry.loggedAtEpochMs)),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = ext.mutedText
+                            )
+                        }
+                        IconButton(
+                            onClick = { onDeleteEntry(entry.id) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Delete,
+                                contentDescription = "Delete water entry",
+                                tint = ext.mutedText,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CustomWaterDialog(
+    unitSystem: UnitSystem,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit
+) {
+    val unitLabel = FitnessCalculations.waterUnitLabel(unitSystem)
+    var inputText by remember { mutableStateOf(if (unitSystem == UnitSystem.IMPERIAL) "12" else "350") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Custom Water ($unitLabel)") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = inputText,
+                    onValueChange = { inputText = it.filter { c -> c.isDigit() || c == '.' }.take(5) },
+                    label = { Text("Amount ($unitLabel)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val parsed = inputText.toDoubleOrNull()
+                    if (parsed != null && parsed > 0) {
+                        val ml = FitnessCalculations.displayWaterToMl(parsed, unitSystem).coerceIn(1, 5000)
+                        onConfirm(ml)
+                    }
+                }
+            ) { Text("Add") }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+private fun EditWaterTargetDialog(
+    currentTargetMl: Int,
+    autoTargetMl: Int,
+    unitSystem: UnitSystem,
+    onDismiss: () -> Unit,
+    onSaveTarget: (Int) -> Unit
+) {
+    val unitLabel = FitnessCalculations.waterUnitLabel(unitSystem)
+    val initialVal = FitnessCalculations.mlToDisplayWater(currentTargetMl, unitSystem).roundToInt().toString()
+    var targetText by remember { mutableStateOf(initialVal) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Daily Water Target ($unitLabel)") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Auto recommendation based on your weight (35 ml/kg): ${FitnessCalculations.formatWater(autoTargetMl, unitSystem)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = FitTrackThemeExt.colors.mutedText
+                )
+                OutlinedTextField(
+                    value = targetText,
+                    onValueChange = { targetText = it.filter(Char::isDigit).take(5) },
+                    label = { Text("Custom Target ($unitLabel)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                TextButton(
+                    onClick = { onSaveTarget(0) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Reset to Auto (${FitnessCalculations.formatWater(autoTargetMl, unitSystem)})")
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val parsed = targetText.toDoubleOrNull()
+                    if (parsed != null && parsed > 0) {
+                        val ml = FitnessCalculations.displayWaterToMl(parsed, unitSystem).coerceIn(500, 10000)
+                        onSaveTarget(ml)
+                    }
+                }
+            ) { Text("Save Target") }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+private fun MacroPill(label: String, value: String, modifier: Modifier = Modifier) {
     Surface(
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = NutritionLime.copy(alpha = 0.55f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = FitTrackThemeExt.colors.mutedText)
-            Text(value, style = MonoMetricSmall, color = MaterialTheme.colorScheme.onSurface)
+            Text(value, style = MonoMetricSmall, color = NutritionForestDark, fontWeight = FontWeight.Bold)
         }
     }
 }

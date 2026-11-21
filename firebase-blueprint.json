@@ -21,6 +21,7 @@
         "calorieTarget": { "type": "integer", "description": "Daily calorie target in kcal." },
         "proteinTargetG": { "type": "integer", "description": "Daily protein target in grams." },
         "cardioTargetMinPerDay": { "type": "integer", "description": "Daily cardio target in minutes." },
+        "waterTargetMl": { "type": "integer", "description": "Optional custom daily hydration target in ml (0 for auto 35 ml/kg)." },
         "unitSystem": { "type": "string", "enum": ["METRIC", "IMPERIAL"] },
         "onboardingCompleted": { "type": "boolean", "description": "Whether initial setup wizard is completed." },
         "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp set via FieldValue.serverTimestamp()." },
@@ -202,6 +203,19 @@
         "fiber", "mealType", "dateKey", "loggedAtEpochMs", "createdAt", "updatedAt"
       ]
     },
+    "WaterLog": {
+      "title": "WaterLog",
+      "description": "Individual logged hydration intake entry in milliliters.",
+      "type": "object",
+      "properties": {
+        "amountMl": { "type": "integer", "description": "Water intake amount in milliliters." },
+        "dateKey": { "type": "string", "description": "YYYY-MM-DD date key." },
+        "loggedAtEpochMs": { "type": "integer", "description": "Client epoch timestamp in milliseconds." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["amountMl", "dateKey", "loggedAtEpochMs", "createdAt", "updatedAt"]
+    },
     "WeightLog": {
       "title": "WeightLog",
       "description": "Recorded body weight entry for trend tracking.",
@@ -286,6 +300,10 @@
     "/users/{userId}/food_logs/{logId}": {
       "schema": { "$ref": "#/entities/FoodLog" },
       "description": "Daily nutrition intake logs."
+    },
+    "/users/{userId}/water_logs/{logId}": {
+      "schema": { "$ref": "#/entities/WaterLog" },
+      "description": "Daily hydration water intake logs."
     },
     "/users/{userId}/weight_logs/{logId}": {
       "schema": { "$ref": "#/entities/WeightLog" },

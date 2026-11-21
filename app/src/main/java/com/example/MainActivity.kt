@@ -5,12 +5,24 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
@@ -30,8 +42,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -74,7 +88,9 @@ import com.example.ui.nutrition.NutritionScreen
 import com.example.ui.onboarding.OnboardingScreen
 import com.example.ui.profile.ProfileScreen
 import com.example.ui.progress.ProgressScreen
+import com.example.ui.theme.FitTrackSection
 import com.example.ui.theme.FitTrackTheme
+import com.example.ui.theme.FitTrackThemeExt
 import com.example.ui.workout.ActiveWorkoutScreen
 import com.example.ui.workout.CardioLogDialog
 import com.example.ui.workout.WorkoutScreen
@@ -82,18 +98,25 @@ import com.example.viewmodel.FitTrackViewModel
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
+import kotlin.math.roundToInt
 
 private enum class FitTrackTab(
     val route: String,
     val label: String,
+    val section: FitTrackSection,
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector
 ) {
-    HOME("home", "Home", Icons.Filled.Home, Icons.Outlined.Home),
-    WORKOUT("workout", "Workout", Icons.Filled.FitnessCenter, Icons.Outlined.FitnessCenter),
-    NUTRITION("nutrition", "Nutrition", Icons.Filled.Restaurant, Icons.Outlined.Restaurant),
-    PROGRESS("progress", "Progress", Icons.Filled.ShowChart, Icons.Outlined.ShowChart),
-    PROFILE("profile", "Profile", Icons.Filled.Person, Icons.Outlined.Person)
+    HOME("home", "Home", FitTrackSection.HOME, Icons.Filled.Home, Icons.Outlined.Home),
+    WORKOUT("workout", "Workout", FitTrackSection.WORKOUT, Icons.Filled.FitnessCenter, Icons.Outlined.FitnessCenter),
+    NUTRITION("nutrition", "Nutrition", FitTrackSection.NUTRITION, Icons.Filled.Restaurant, Icons.Outlined.Restaurant),
+    PROGRESS("progress", "Progress", FitTrackSection.PROGRESS, Icons.Filled.ShowChart, Icons.Outlined.ShowChart),
+    PROFILE("profile", "Profile", FitTrackSection.PROFILE, Icons.Filled.Person, Icons.Outlined.Person);
+
+    companion object {
+        fun fromRoute(route: String?): FitTrackTab =
+            entries.firstOrNull { it.route == route } ?: HOME
+    }
 }
 
 class MainActivity : ComponentActivity() {
@@ -104,9 +127,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
         )
         setContent {
-            FitTrackTheme {
-                FitTrackRoot()
-            }
+            FitTrackRoot()
         }
     }
 }
@@ -125,7 +146,9 @@ fun FitTrackRoot() {
 
     val user = currentUser
     if (user == null) {
-        AuthScreen(onAuthSuccess = { currentUser = Firebase.auth.currentUser })
+        FitTrackTheme(section = FitTrackSection.HOME) {
+            AuthScreen(onAuthSuccess = { currentUser = Firebase.auth.currentUser })
+        }
     } else {
         val uid = user.uid
         // Keyed by UID so switching accounts tears down and recreates all ViewModels & listeners cleanly
@@ -188,55 +211,65 @@ private fun FitTrackAuthenticatedShell(
 
     // 1. Loading initial local + cloud session sync
     if (!state.isInitialized) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+        FitTrackTheme(section = FitTrackSection.HOME) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            }
         }
         return
     }
 
     // 2. First-time user setup wizard
     if (state.profile == null || state.profile?.onboardingCompleted != true) {
-        OnboardingScreen(
-            userId = currentUserId,
-            defaultName = displayName,
-            defaultEmail = email,
-            unitSystem = state.preferences.unitSystem,
-            onUnitSystemChanged = viewModel::setUnitSystem,
-            onComplete = viewModel::completeOnboarding
-        )
+        FitTrackTheme(section = FitTrackSection.HOME) {
+            OnboardingScreen(
+                userId = currentUserId,
+                defaultName = displayName,
+                defaultEmail = email,
+                unitSystem = state.preferences.unitSystem,
+                onUnitSystemChanged = viewModel::setUnitSystem,
+                onComplete = viewModel::completeOnboarding
+            )
+        }
         return
     }
 
-    // 3. Full-screen Active Workout Session overlay
+    // 3. Full-screen Active Workout Session overlay (inherits Workout #701A1F + #1E3A8A theme)
     activeWorkout?.let { active ->
-        ActiveWorkoutScreen(
-            session = active,
-            restTimer = restTimer,
-            unitSystem = state.preferences.unitSystem,
-            onUpdateSet = viewModel::updateActiveSet,
-            onAddSet = viewModel::addSetToActiveExercise,
-            onRemoveSet = viewModel::removeSetFromActiveExercise,
-            onQuickProgression = viewModel::applyQuickProgression,
-            onUpdateNotes = viewModel::updateActiveWorkoutNotes,
-            onStartRestTimer = viewModel::startRestTimer,
-            onAdjustRestTimer = viewModel::adjustRestTimer,
-            onStopRestTimer = viewModel::stopRestTimer,
-            onFinishWorkout = viewModel::finishActiveWorkout,
-            onCancelWorkout = viewModel::cancelActiveWorkout
-        )
+        FitTrackTheme(section = FitTrackSection.WORKOUT) {
+            ActiveWorkoutScreen(
+                session = active,
+                restTimer = restTimer,
+                unitSystem = state.preferences.unitSystem,
+                onUpdateSet = viewModel::updateActiveSet,
+                onAddSet = viewModel::addSetToActiveExercise,
+                onRemoveSet = viewModel::removeSetFromActiveExercise,
+                onQuickProgression = viewModel::applyQuickProgression,
+                onUpdateNotes = viewModel::updateActiveWorkoutNotes,
+                onStartRestTimer = viewModel::startRestTimer,
+                onAdjustRestTimer = viewModel::adjustRestTimer,
+                onStopRestTimer = viewModel::stopRestTimer,
+                onFinishWorkout = viewModel::finishActiveWorkout,
+                onCancelWorkout = viewModel::cancelActiveWorkout
+            )
+        }
         return
     }
 
-    // 4. Main 5-Tab Adaptive Navigation Shell
+    // 4. Main 5-Tab Adaptive Navigation Shell with Per-Tab Animated Palettes & Smooth Transitions
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route ?: FitTrackTab.HOME.route
+    val activeTab = FitTrackTab.fromRoute(currentRoute)
     var showCardioDialog by remember { mutableStateOf(false) }
 
     fun navigateToTab(tab: FitTrackTab) {
+        if (currentRoute == tab.route) return
         navController.navigate(tab.route) {
             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
             launchSingleTop = true
@@ -244,176 +277,245 @@ private fun FitTrackAuthenticatedShell(
         }
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val useNavRail = maxWidth >= 600.dp
+    FitTrackTheme(section = activeTab.section) {
+        val ext = FitTrackThemeExt.colors
 
-        Scaffold(
-            contentWindowInsets = WindowInsets.safeDrawing,
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            bottomBar = {
-                if (!useNavRail) {
-                    NavigationBar(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    ) {
-                        FitTrackTab.entries.forEach { tab ->
-                            val selected = currentRoute == tab.route
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = { navigateToTab(tab) },
-                                icon = {
-                                    Icon(
-                                        imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-                                        contentDescription = tab.label
-                                    )
-                                },
-                                label = { Text(tab.label) },
-                                modifier = Modifier.testTag("nav_${tab.route}")
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            val useNavRail = maxWidth >= 600.dp
+
+            Scaffold(
+                containerColor = MaterialTheme.colorScheme.background,
+                contentWindowInsets = WindowInsets.safeDrawing,
+                snackbarHost = { SnackbarHost(snackbarHostState) },
+                bottomBar = {
+                    if (!useNavRail) {
+                        Column {
+                            // Subtle 3D top bevel highlight line separating nav bar
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(1.dp)
+                                    .background(ext.cardTopHighlight.copy(alpha = 0.35f))
                             )
+                            NavigationBar(
+                                containerColor = ext.navBarContainer,
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                                tonalElevation = 0.dp
+                            ) {
+                                FitTrackTab.entries.forEach { tab ->
+                                    val selected = currentRoute == tab.route
+                                    NavigationBarItem(
+                                        selected = selected,
+                                        onClick = { navigateToTab(tab) },
+                                        icon = {
+                                            Icon(
+                                                imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                                                contentDescription = tab.label
+                                            )
+                                        },
+                                        label = { Text(tab.label) },
+                                        colors = NavigationBarItemDefaults.colors(
+                                            selectedIconColor = ext.navOnIndicator,
+                                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                                            indicatorColor = ext.navIndicator,
+                                            unselectedIconColor = ext.mutedText,
+                                            unselectedTextColor = ext.mutedText
+                                        ),
+                                        modifier = Modifier.testTag("nav_${tab.route}")
+                                    )
+                                }
+                            }
                         }
                     }
                 }
-            }
-        ) { innerPadding ->
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-            ) {
-                if (useNavRail) {
-                    NavigationRail(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        modifier = Modifier.fillMaxHeight()
-                    ) {
-                        FitTrackTab.entries.forEach { tab ->
-                            val selected = currentRoute == tab.route
-                            NavigationRailItem(
-                                selected = selected,
-                                onClick = { navigateToTab(tab) },
-                                icon = {
-                                    Icon(
-                                        imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-                                        contentDescription = tab.label
-                                    )
-                                },
-                                label = { Text(tab.label) },
-                                modifier = Modifier.testTag("nav_${tab.route}")
-                            )
-                        }
-                    }
-                }
-
-                Box(
+            ) { innerPadding ->
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                    contentAlignment = Alignment.TopCenter
+                        .fillMaxSize()
+                        .padding(innerPadding)
                 ) {
-                    NavHost(
-                        navController = navController,
-                        startDestination = FitTrackTab.HOME.route,
+                    if (useNavRail) {
+                        NavigationRail(
+                            containerColor = ext.navBarContainer,
+                            modifier = Modifier.fillMaxHeight()
+                        ) {
+                            FitTrackTab.entries.forEach { tab ->
+                                val selected = currentRoute == tab.route
+                                NavigationRailItem(
+                                    selected = selected,
+                                    onClick = { navigateToTab(tab) },
+                                    icon = {
+                                        Icon(
+                                            imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                                            contentDescription = tab.label
+                                        )
+                                    },
+                                    label = { Text(tab.label) },
+                                    colors = NavigationRailItemDefaults.colors(
+                                        selectedIconColor = ext.navOnIndicator,
+                                        selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                                        indicatorColor = ext.navIndicator,
+                                        unselectedIconColor = ext.mutedText,
+                                        unselectedTextColor = ext.mutedText
+                                    ),
+                                    modifier = Modifier.testTag("nav_${tab.route}")
+                                )
+                            }
+                        }
+                    }
+
+                    Box(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .widthIn(max = 820.dp)
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        contentAlignment = Alignment.TopCenter
                     ) {
-                        composable(FitTrackTab.HOME.route) {
-                            DashboardScreen(
-                                state = state,
-                                appUpdateStatus = appUpdateStatus,
-                                updateBannerDismissed = updateBannerDismissed,
-                                onDismissUpdateBanner = viewModel::dismissUpdateBanner,
-                                onSyncClick = viewModel::triggerManualSync,
-                                onLogWeight = viewModel::logWeight,
-                                onStartWorkout = viewModel::startWorkoutFromTemplate,
-                                onOpenCardioLog = { showCardioDialog = true },
-                                onNavigateToNutrition = { navigateToTab(FitTrackTab.NUTRITION) },
-                                onNavigateToWorkout = { navigateToTab(FitTrackTab.WORKOUT) },
-                                onNavigateToProgress = { navigateToTab(FitTrackTab.PROGRESS) }
-                            )
-                        }
-                        composable(FitTrackTab.WORKOUT.route) {
-                            WorkoutScreen(
-                                state = state,
-                                onStartTemplate = viewModel::startWorkoutFromTemplate,
-                                onSaveTemplate = viewModel::saveWorkoutTemplate,
-                                onDeleteTemplate = viewModel::deleteWorkoutTemplate,
-                                onAddCustomExercise = viewModel::addCustomExercise,
-                                onToggleExerciseFavorite = viewModel::toggleExerciseFavorite,
-                                onOpenCardioDialog = { showCardioDialog = true },
-                                onRepeatCardio = { c ->
-                                    viewModel.logCardio(
-                                        activityType = CardioActivityType.fromNameSafe(c.activityType),
-                                        durationMinutes = c.durationMinutes,
-                                        distanceKm = c.distanceKm,
-                                        speedKmh = c.speedKmh,
-                                        inclinePercent = c.inclinePercent,
-                                        resistanceLevel = c.resistanceLevel,
-                                        notes = c.notes
-                                    )
-                                },
-                                onDeleteCardio = viewModel::deleteCardioSession,
-                                onDeleteWorkoutSession = viewModel::deleteWorkoutSession
-                            )
-                        }
-                        composable(FitTrackTab.NUTRITION.route) {
-                            NutritionScreen(
-                                state = state,
-                                onLogFood = viewModel::logFoodItem,
-                                onToggleFoodFavorite = viewModel::toggleFoodFavorite,
-                                onCreateCustomFood = viewModel::createCustomFood,
-                                onSaveMealPreset = viewModel::saveMealPreset,
-                                onLogSavedMeal = viewModel::logSavedMeal,
-                                onDeleteSavedMeal = viewModel::deleteSavedMeal,
-                                onDeleteFoodLog = viewModel::deleteFoodLog
-                            )
-                        }
-                        composable(FitTrackTab.PROGRESS.route) {
-                            ProgressScreen(
-                                state = state,
-                                onLogWeight = viewModel::logWeight,
-                                onLogMeasurements = viewModel::logMeasurements,
-                                onAddProgressPhoto = viewModel::addProgressPhoto,
-                                onDeleteProgressPhoto = viewModel::deleteProgressPhoto
-                            )
-                        }
-                        composable(FitTrackTab.PROFILE.route) {
-                            ProfileScreen(
-                                state = state,
-                                appUpdateStatus = appUpdateStatus,
-                                bundledUpdateSourceConfigured = viewModel.defaultGitHubRepo.isNotBlank(),
-                                onSaveGitHubRepo = viewModel::saveGitHubRepoAndCheck,
-                                onCheckForUpdates = { viewModel.checkForAppUpdates(manual = true) },
-                                onUpdateProfile = viewModel::updateProfile,
-                                onUnitSystemChange = viewModel::setUnitSystem,
-                                onUpdateReminders = viewModel::updateReminderPrefs,
-                                onManualSync = viewModel::triggerManualSync,
-                                onExportData = viewModel::exportData,
-                                onClearWorkouts = viewModel::clearWorkoutHistory,
-                                onClearFoods = viewModel::clearFoodHistory,
-                                onDeleteAccountData = {
-                                    viewModel.deleteAccountData {
+                        NavHost(
+                            navController = navController,
+                            startDestination = FitTrackTab.HOME.route,
+                            enterTransition = {
+                                val fromIdx = FitTrackTab.fromRoute(initialState.destination.route).ordinal
+                                val toIdx = FitTrackTab.fromRoute(targetState.destination.route).ordinal
+                                val dir = if (toIdx >= fromIdx) 1 else -1
+                                slideInHorizontally(
+                                    animationSpec = tween(340, easing = FastOutSlowInEasing),
+                                    initialOffsetX = { (it * 0.24f * dir).roundToInt() }
+                                ) + fadeIn(
+                                    animationSpec = tween(300, easing = FastOutSlowInEasing)
+                                ) + scaleIn(
+                                    animationSpec = tween(340, easing = FastOutSlowInEasing),
+                                    initialScale = 0.965f
+                                )
+                            },
+                            exitTransition = {
+                                val fromIdx = FitTrackTab.fromRoute(initialState.destination.route).ordinal
+                                val toIdx = FitTrackTab.fromRoute(targetState.destination.route).ordinal
+                                val dir = if (toIdx >= fromIdx) 1 else -1
+                                slideOutHorizontally(
+                                    animationSpec = tween(300, easing = FastOutSlowInEasing),
+                                    targetOffsetX = { (-it * 0.16f * dir).roundToInt() }
+                                ) + fadeOut(
+                                    animationSpec = tween(220, easing = FastOutSlowInEasing)
+                                ) + scaleOut(
+                                    animationSpec = tween(300, easing = FastOutSlowInEasing),
+                                    targetScale = 0.975f
+                                )
+                            },
+                            popEnterTransition = {
+                                fadeIn(tween(300, easing = FastOutSlowInEasing)) +
+                                    scaleIn(tween(320, easing = FastOutSlowInEasing), initialScale = 0.965f)
+                            },
+                            popExitTransition = {
+                                fadeOut(tween(220, easing = FastOutSlowInEasing))
+                            },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .widthIn(max = 820.dp)
+                        ) {
+                            composable(FitTrackTab.HOME.route) {
+                                DashboardScreen(
+                                    state = state,
+                                    appUpdateStatus = appUpdateStatus,
+                                    updateBannerDismissed = updateBannerDismissed,
+                                    onDismissUpdateBanner = viewModel::dismissUpdateBanner,
+                                    onSyncClick = viewModel::triggerManualSync,
+                                    onLogWeight = viewModel::logWeight,
+                                    onLogWater = viewModel::logWater,
+                                    onNavigateToNutrition = { navigateToTab(FitTrackTab.NUTRITION) },
+                                    onNavigateToProgress = { navigateToTab(FitTrackTab.PROGRESS) }
+                                )
+                            }
+                            composable(FitTrackTab.WORKOUT.route) {
+                                WorkoutScreen(
+                                    state = state,
+                                    onStartTemplate = viewModel::startWorkoutFromTemplate,
+                                    onSaveTemplate = viewModel::saveWorkoutTemplate,
+                                    onDeleteTemplate = viewModel::deleteWorkoutTemplate,
+                                    onAddCustomExercise = viewModel::addCustomExercise,
+                                    onToggleExerciseFavorite = viewModel::toggleExerciseFavorite,
+                                    onOpenCardioDialog = { showCardioDialog = true },
+                                    onRepeatCardio = { c ->
+                                        viewModel.logCardio(
+                                            activityType = CardioActivityType.fromNameSafe(c.activityType),
+                                            durationMinutes = c.durationMinutes,
+                                            distanceKm = c.distanceKm,
+                                            speedKmh = c.speedKmh,
+                                            inclinePercent = c.inclinePercent,
+                                            resistanceLevel = c.resistanceLevel,
+                                            notes = c.notes
+                                        )
+                                    },
+                                    onDeleteCardio = viewModel::deleteCardioSession,
+                                    onDeleteWorkoutSession = viewModel::deleteWorkoutSession
+                                )
+                            }
+                            composable(FitTrackTab.NUTRITION.route) {
+                                NutritionScreen(
+                                    state = state,
+                                    onLogFood = viewModel::logFoodItem,
+                                    onToggleFoodFavorite = viewModel::toggleFoodFavorite,
+                                    onCreateCustomFood = viewModel::createCustomFood,
+                                    onSaveMealPreset = viewModel::saveMealPreset,
+                                    onLogSavedMeal = viewModel::logSavedMeal,
+                                    onDeleteSavedMeal = viewModel::deleteSavedMeal,
+                                    onDeleteFoodLog = viewModel::deleteFoodLog,
+                                    onLogWater = viewModel::logWater,
+                                    onDeleteWaterLog = viewModel::deleteWaterLog,
+                                    onUpdateWaterTargetMl = viewModel::updateWaterTargetMl
+                                )
+                            }
+                            composable(FitTrackTab.PROGRESS.route) {
+                                ProgressScreen(
+                                    state = state,
+                                    onLogWeight = viewModel::logWeight,
+                                    onLogMeasurements = viewModel::logMeasurements,
+                                    onAddProgressPhoto = viewModel::addProgressPhoto,
+                                    onDeleteProgressPhoto = viewModel::deleteProgressPhoto
+                                )
+                            }
+                            composable(FitTrackTab.PROFILE.route) {
+                                ProfileScreen(
+                                    state = state,
+                                    appUpdateStatus = appUpdateStatus,
+                                    bundledUpdateSourceConfigured = viewModel.defaultGitHubRepo.isNotBlank(),
+                                    onSaveGitHubRepo = viewModel::saveGitHubRepoAndCheck,
+                                    onCheckForUpdates = { viewModel.checkForAppUpdates(manual = true) },
+                                    onUpdateProfile = viewModel::updateProfile,
+                                    onUnitSystemChange = viewModel::setUnitSystem,
+                                    onUpdateReminders = viewModel::updateReminderPrefs,
+                                    onManualSync = viewModel::triggerManualSync,
+                                    onExportData = viewModel::exportData,
+                                    onClearWorkouts = viewModel::clearWorkoutHistory,
+                                    onClearFoods = viewModel::clearFoodHistory,
+                                    onDeleteAccountData = {
+                                        viewModel.deleteAccountData {
+                                            signOutFromGoogle(credentialManager, scope)
+                                        }
+                                    },
+                                    onSignOut = {
                                         signOutFromGoogle(credentialManager, scope)
                                     }
-                                },
-                                onSignOut = {
-                                    signOutFromGoogle(credentialManager, scope)
-                                }
-                            )
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
-    }
 
-    if (showCardioDialog) {
-        CardioLogDialog(
-            weightKg = state.profile?.currentWeightKg ?: 75.0,
-            unitSystem = state.preferences.unitSystem,
-            onDismiss = { showCardioDialog = false },
-            onSave = { act, dur, dist, speed, inc, lvl, notes ->
-                viewModel.logCardio(act, dur, dist, speed, inc, lvl, notes)
+            if (showCardioDialog) {
+                CardioLogDialog(
+                    weightKg = state.profile?.currentWeightKg ?: 75.0,
+                    unitSystem = state.preferences.unitSystem,
+                    onDismiss = { showCardioDialog = false },
+                    onSave = { act, dur, dist, speed, inc, lvl, notes ->
+                        viewModel.logCardio(act, dur, dist, speed, inc, lvl, notes)
+                    }
+                )
             }
-        )
+        }
     }
 }
