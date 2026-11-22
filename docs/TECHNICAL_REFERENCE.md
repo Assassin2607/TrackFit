@@ -50,26 +50,28 @@ This document is the complete, exact inventory of every module, file, design tok
 | `data/local/FitTrackDaos.kt` | Room DAOs (`UserProfileDao`, `UserGoalDao`, `ExerciseDao`, `WorkoutTemplateDao`, `WorkoutSessionDao`, `CardioSessionDao`, `NutritionDao`, `WaterDao`, `BodyMetricsDao`, `SyncQueueDao`). |
 | `data/local/FitTrackDatabase.kt` | Singleton Room database (`fittrack_db`, version `2` with non-destructive `MIGRATION_1_2`). |
 | `data/seed/SeedCatalogs.kt` | `FoodCatalogProvider` swappable boundary, JSON serializers (`SeedSerialization`), pre-seeded Gym + 38+ Home/Bodyweight exercise library, starter Gym & 6 starter Home templates (`tpl_home_*`), Home/Gym classification helpers, and curated staple food catalog. |
-| `data/prefs/PreferencesManager.kt` | Jetpack DataStore (`fittrack_prefs`) persisting `unitSystem`, reminder toggles, and `githubRepo`. |
-| `notifications/FitTrackNotificationManager.kt` | Notification channels (`fittrack_reminders`, `fittrack_pr_alerts`), Android 13+ permission checks, Play-compliant `AlarmManager.setInexactRepeating` daily/weekly reminder scheduling, instant PR alert notifications, and test notification trigger. |
+| `data/prefs/PreferencesManager.kt` | Jetpack DataStore (`fittrack_prefs`) persisting `unitSystem`, reminder toggles, custom personal reminder times (hour/minute + weekly weekday), non-destructive 7-Day Volume & Weight/Trend reset baselines, and `githubRepo`. |
+| `notifications/FitTrackNotificationManager.kt` | Notification channels (`fittrack_reminders`, `fittrack_pr_alerts`), Android 13+ permission checks, Play-compliant `AlarmManager.setInexactRepeating` daily/weekly reminder scheduling using user-customized personal times, 12-hour/weekday formatters, instant PR alert notifications, and test notification trigger. |
 | `notifications/FitTrackReminderReceiver.kt` | Non-exported `BroadcastReceiver` delivering scheduled reminder notifications and restoring enabled reminders on `ACTION_BOOT_COMPLETED`. |
 | `data/remote/FirestoreErrorHandler.kt` | Structured Firestore error classification & logging (`OperationType`). |
-| `data/remote/FirestoreSyncManager.kt` | Authenticated Firestore push (`flushQueue`), immutable-`createdAt` safe upserts (`upsertPreservingCreatedAt`), cloud-to-local restore (`pullCloudDataIntoLocal`), and full account deletion (`deleteAllRemoteUserData`). |
-| `data/remote/GitHubUpdateChecker.kt` | Zero-permission GitHub Releases API checker (`normalizeRepoInput`, `isNewerVersion`, `checkLatestRelease`, `AppUpdateInfo`, `AppUpdateStatus`). |
-| `data/repository/FitTrackRepository.kt` | Offline-first repository orchestrating Room transactions, Gym & Home seed hydration, template sync from workout history, private progress photo copying, sync queue enqueue/flush, and JSON export. |
-| `viewmodel/FitTrackViewModel.kt` | Reactive state aggregator computing all derived metrics (including daily estimated weight), active workout state, rest timer coroutine, reminder alarm syncing, PR notifications, cloud sync triggers, and GitHub update checks. |
+| `data/remote/FirestoreSyncManager.kt` | Connectivity-aware (`ConnectivityManager`) authenticated Firestore push (`flushQueue` with 8s per-op timeout & fast offline bail-out), immutable-`createdAt` safe upserts (`upsertPreservingCreatedAt`), cloud-to-local restore (`pullCloudDataIntoLocal` with 12s timeout), and full account deletion (`deleteAllRemoteUserData`). |
+| `data/remote/GitHubUpdateChecker.kt` | GitHub Releases API checker (`normalizeRepoInput`, `isNewerVersion`, `checkLatestRelease`, `AppUpdateInfo`, `AppUpdateStatus`). |
+| `data/remote/InAppApkUpdater.kt` | Direct in-app GitHub Release `.apk` streaming downloader (with redirect support & live progress `ApkDownloadState`), `canRequestPackageInstalls()` check, and `FileProvider` system Package Installer launcher (`ACTION_INSTALL_PACKAGE` / `ACTION_VIEW` with `FLAG_GRANT_READ_URI_PERMISSION`). |
+| `data/repository/FitTrackRepository.kt` | Instant offline-first repository splitting `<50ms` local Room init (`initializeLocalSession`) from non-blocking background `syncCloudSession` & dedicated `backgroundSyncScope` queue flushes, plus Gym & Home seed hydration, template sync from workout history, private progress photo copying, and JSON export. |
+| `viewmodel/FitTrackViewModel.kt` | Reactive state aggregator with non-blocking offline startup, non-destructive 7-Day Volume & Weight/Trend baseline scoping, direct in-app APK updater state machine, custom reminder time updates, active workout state, rest timer coroutine, PR notifications, and cloud sync triggers. |
 | `ui/auth/GoogleAuthHelper.kt` | Jetpack `CredentialManager` Google Sign-In (`GetGoogleIdOption` / `GetSignInWithGoogleOption`), Firebase credential exchange, and sign-out cleanup. |
 | `ui/auth/AuthScreen.kt` | Branded FitTrack welcome & Google Sign-In gate. |
 | `ui/components/FitTrackComponents.kt` | Reusable 3D M3 components (`FitTrackCard`, `DailyScoreRing`, `MacroProgressBar`, `SectionHeader`, `SyncStatusBadge`, `EstimationDisclaimerBanner`). |
+| `ui/components/BaselineResetDialog.kt` | Shared non-destructive `MetricBaselineResetDialog` (Start Fresh Right Now, Start from First of Week Mon, custom 7-day picker, Restore) and `InAppUpdateActionPanel` (live download progress bar, Cancel, Allow & Install, Install, Retry). |
 | `ui/onboarding/OnboardingScreen.kt` | 3-step onboarding flow with live deterministic BMR/TDEE/macro preview. |
-| `ui/dashboard/GameScoreHeroCard.kt` | Game-HUD Today's Score hero card: Rank Shield Crest (`S+`→`D`), 20-segment radial power gauge, XP tier progress bar, Streak Flame pill, and 5-pillar RPG quest stat slots. |
-| `ui/dashboard/DashboardScreen.kt` | Home tab: `GameScoreHeroCard` & rank breakdown modal, Weight & Trend card with Calorie-Deficit Daily Estimated Weight + `WeightEstimateBreakdownDialog`, Nutrition Today with 3D Hydration Ring & quick Water Log, Energy Balance, coaching insight, GitHub Release update banner. |
-| `ui/workout/WorkoutScreen.kt` | Training Studio tab: Two-button **Gym Training** / **Home Training** mode switcher, mode-scoped KPI card (`7-Day Volume` / `7-Day Home Reps`) with clickable daily workout breakdown dialog, Cream-titled templates, Cardio logger, Gym/Home exercise library, and workout history. |
+| `ui/dashboard/GameScoreHeroCard.kt` | Game-HUD Today's Score hero card: Rank Shield Crest (`S+`→`D`), smooth 3D glowing orbital energy ring (`GameOrbitalPowerRing`), animated score meter transition (`animateFromScore` → `score` with floating `+X PTS` gain badge when returning to Home after a log), XP tier progress bar, Streak Flame pill, and 5-pillar RPG quest stat slots. |
+| `ui/dashboard/DashboardScreen.kt` | Home tab: `GameScoreHeroCard` & rank breakdown modal, Weight & Trend card with Calorie-Deficit Daily Estimated Weight + non-destructive Reset dialog + `WeightEstimateBreakdownDialog`, Nutrition Today with 3D Hydration Ring & quick Water Log, Energy Balance, coaching insight, direct in-app GitHub Release updater banner. |
+| `ui/workout/WorkoutScreen.kt` | Training Studio tab: Two-button **Gym Training** / **Home Training** mode switcher, mode-scoped KPI card (`7-Day Volume` / `7-Day Home Reps`) with clickable daily workout breakdown dialog & non-destructive Reset control (preserves 100% of Workout History), Cream-titled templates, Cardio logger, Gym/Home exercise library, and workout history. |
 | `ui/workout/ActiveWorkoutScreen.kt` | Full-screen active workout logger with Rest Timer pinned at top, Finish Workout docked at bottom, bodyweight (`BW`) input support, previous-set hints, set/RIR/warmup editing, quick progression buttons, and live PR badges. |
 | `ui/workout/CardioLogSheet.kt` | MET-calibrated cardio logging dialog with real-time calorie estimate preview. |
 | `ui/nutrition/NutritionScreen.kt` | Nutrition tab: Light botanical palette, high-contrast black Weekly toggle, 3D Water Log card, daily macro summary, meal-grouped logs, staple/custom food picker, favorites, custom food creator, Saved Meals builder & multiplier logger. |
 | `ui/progress/ProgressScreen.kt` | Progress tab: Weight logger, interactive Canvas Bezier trend chart + `Est. Today` calorie-estimated weight KPI, 3D 7-day Calorie/Protein/Hydration charts, body measurements, Android Photo Picker progress gallery & comparison, PR leaderboard, achievements. |
-| `ui/profile/ProfileScreen.kt` | Profile tab: Athlete summary, Edit Goals dialog, Metric/Imperial toggle, Transparent Formulas dialog, live Reminder Preferences with Android 13+ `POST_NOTIFICATIONS` permission launcher + Test Notification trigger, App Updates above Cloud Sync & Privacy, JSON export, Clear/Delete data controls, Sign Out. |
+| `ui/profile/ProfileScreen.kt` | Profile tab: Athlete summary, Edit Goals dialog, Metric/Imperial toggle, Transparent Formulas dialog, live Reminder Preferences with Android 13+ `POST_NOTIFICATIONS` permission launcher + tappable personal time chips (`TimePicker` + weekday picker) + Test Notification trigger, direct in-app App Updates above Cloud Sync & Privacy, JSON export, Clear/Delete data controls, Sign Out. |
 
 ### Automated Test Files
 | Path | Coverage |
@@ -209,12 +211,12 @@ FitTrack uses **zero AI models** — every calculation is deterministic and audi
 
 | Permission / API | Usage |
 | :--- | :--- |
-| `android.permission.INTERNET` | Firebase Auth, Cloud Firestore sync, GitHub Releases update check. |
-| `android.permission.ACCESS_NETWORK_STATE` | Connectivity awareness for Firebase SDK. |
+| `android.permission.INTERNET` | Firebase Auth, Cloud Firestore sync, GitHub Releases update check & direct APK download. |
+| `android.permission.ACCESS_NETWORK_STATE` | Fast connectivity detection (`ConnectivityManager`) so offline startup & writes never hang waiting on network timeouts. |
 | `android.permission.POST_NOTIFICATIONS` | Runtime permission (Android 13+) for daily/weekly fitness reminders & instant PR celebration alerts. |
 | `android.permission.RECEIVE_BOOT_COMPLETED` | Restores enabled inexact reminders via `FitTrackReminderReceiver` after device reboot (no exact-alarm permissions). |
+| `android.permission.REQUEST_INSTALL_PACKAGES` | Launches Android's native Package Installer overlay directly via `FileProvider` (`res/xml/file_paths.xml`) for self-hosted GitHub Releases APK updates without Chrome redirection. |
 | `ActivityResultContracts.PickVisualMedia` | Zero-permission Android Photo Picker for progress photos (no `READ_MEDIA_IMAGES` or `READ_EXTERNAL_STORAGE`). |
-| `Intent.ACTION_VIEW` | Opens GitHub Release `.apk` download link in the system browser (no `REQUEST_INSTALL_PACKAGES`, no dynamic code loading). |
 
 ---
 
@@ -235,8 +237,8 @@ FitTrack uses **zero AI models** — every calculation is deterministic and audi
 5. **Release Artifacts**:
    - `FitTrack-v<version>.apk`
    - `FitTrack-v<version>.apk.sha256`
-6. **In-App Update Detection (`GitHubUpdateChecker.kt`)**:
+6. **Direct In-App Update Detection & Installation (`GitHubUpdateChecker.kt` + `InAppApkUpdater.kt`)**:
    - Reads the CI-stamped `R.string.github_releases_repo` automatically (hiding the developer repo input in Profile for end users).
-   - On launch (and via **Check for Updates**), FitTrack fetches `https://api.github.com/repos/{owner}/{repo}/releases/latest`.
+   - On launch (non-blocking background check) and via **Check for Updates**, FitTrack fetches `https://api.github.com/repos/{owner}/{repo}/releases/latest`.
    - Parses `tag_name` vs `BuildConfig.VERSION_NAME` via semantic version comparison and locates the `.apk` asset's `browser_download_url`.
-   - Displays a dismissible **Update Available** banner on **Home** and a download action with release notes in **Profile**.
+   - Tapping **Update Now** downloads the `.apk` directly into app-private `cacheDir/updates/` with live progress (`MB` & `%`) and launches Android's system Package Installer overlay via `FileProvider` (prompting once for Android's "Install unknown apps" permission if needed and auto-resuming installation on return via `ON_RESUME`).

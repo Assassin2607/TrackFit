@@ -9,6 +9,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,6 +27,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Logout
+import androidx.compose.material.icons.rounded.AccessTime
 import androidx.compose.material.icons.rounded.Calculate
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Download
@@ -38,6 +41,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -48,10 +52,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -67,6 +74,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.BuildConfig
 import com.example.data.local.UserProfileEntity
+import com.example.data.remote.ApkDownloadState
+import com.example.data.remote.AppUpdateInfo
 import com.example.data.remote.AppUpdateStatus
 import com.example.domain.calc.FitnessCalculations
 import com.example.domain.model.ActivityLevel
@@ -74,23 +83,31 @@ import com.example.domain.model.Gender
 import com.example.domain.model.GoalType
 import com.example.domain.model.UnitSystem
 import com.example.notifications.FitTrackNotificationManager
+import com.example.notifications.FitTrackReminderType
 import com.example.ui.components.EstimationDisclaimerBanner
 import com.example.ui.components.FitTrackCard
+import com.example.ui.components.InAppUpdateActionPanel
 import com.example.ui.components.SyncStatusBadge
 import com.example.ui.theme.FitTrackThemeExt
 import com.example.ui.theme.MonoMetricSmall
 import com.example.viewmodel.FitTrackUiState
+import java.util.Calendar
 
 @Composable
 fun ProfileScreen(
     state: FitTrackUiState,
     appUpdateStatus: AppUpdateStatus = AppUpdateStatus.Idle,
+    apkDownloadState: ApkDownloadState = ApkDownloadState.Idle,
     bundledUpdateSourceConfigured: Boolean = false,
     onSaveGitHubRepo: (String) -> Unit = {},
     onCheckForUpdates: () -> Unit = {},
+    onStartInAppUpdate: (AppUpdateInfo) -> Unit = {},
+    onCancelInAppUpdate: () -> Unit = {},
+    onInstallDownloadedApk: () -> Unit = {},
     onUpdateProfile: (UserProfileEntity, Boolean) -> Unit,
     onUnitSystemChange: (UnitSystem) -> Unit,
     onUpdateReminders: (Boolean?, Boolean?, Boolean?, Boolean?, Boolean?) -> Unit,
+    onUpdateReminderTime: (FitTrackReminderType, Int, Int, Int?) -> Unit = { _, _, _, _ -> },
     onSyncReminders: () -> Unit = {},
     onSendTestNotification: () -> Unit = {},
     onManualSync: () -> Unit,
@@ -108,6 +125,7 @@ fun ProfileScreen(
     var showEditGoalDialog by remember { mutableStateOf(false) }
     var showFormulasDialog by remember { mutableStateOf(false) }
     var showDeleteAccountDialog by remember { mutableStateOf(false) }
+    var editingReminderType by remember { mutableStateOf<FitTrackReminderType?>(null) }
     var githubRepoInput by remember { mutableStateOf(state.preferences.githubRepo) }
 
     var hasNotificationPermission by remember {
@@ -328,7 +346,9 @@ fun ProfileScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 PreferenceToggleRow(
                     label = "Workout Reminders",
-                    subtitle = "Daily at 6:00 PM",
+                    subtitle = "Daily at ${FitTrackNotificationManager.formatTime12Hour(prefs.workoutReminderHour, prefs.workoutReminderMinute)}",
+                    timeChipLabel = FitTrackNotificationManager.formatTime12Hour(prefs.workoutReminderHour, prefs.workoutReminderMinute),
+                    onEditTimeClick = { editingReminderType = FitTrackReminderType.WORKOUT },
                     checked = prefs.workoutReminderEnabled
                 ) { enabled ->
                     if (enabled && !hasNotificationPermission) {
@@ -339,7 +359,9 @@ fun ProfileScreen(
                 }
                 PreferenceToggleRow(
                     label = "Meal Logging Reminders",
-                    subtitle = "Daily at 1:00 PM",
+                    subtitle = "Daily at ${FitTrackNotificationManager.formatTime12Hour(prefs.mealReminderHour, prefs.mealReminderMinute)}",
+                    timeChipLabel = FitTrackNotificationManager.formatTime12Hour(prefs.mealReminderHour, prefs.mealReminderMinute),
+                    onEditTimeClick = { editingReminderType = FitTrackReminderType.MEAL },
                     checked = prefs.mealReminderEnabled
                 ) { enabled ->
                     if (enabled && !hasNotificationPermission) {
@@ -350,7 +372,9 @@ fun ProfileScreen(
                 }
                 PreferenceToggleRow(
                     label = "Morning Weigh-In Reminder",
-                    subtitle = "Daily at 7:30 AM",
+                    subtitle = "Daily at ${FitTrackNotificationManager.formatTime12Hour(prefs.weightReminderHour, prefs.weightReminderMinute)}",
+                    timeChipLabel = FitTrackNotificationManager.formatTime12Hour(prefs.weightReminderHour, prefs.weightReminderMinute),
+                    onEditTimeClick = { editingReminderType = FitTrackReminderType.WEIGHT },
                     checked = prefs.weightReminderEnabled
                 ) { enabled ->
                     if (enabled && !hasNotificationPermission) {
@@ -361,7 +385,9 @@ fun ProfileScreen(
                 }
                 PreferenceToggleRow(
                     label = "Weekly Progress Summary",
-                    subtitle = "Sundays at 6:00 PM",
+                    subtitle = "${FitTrackNotificationManager.dayOfWeekLabel(prefs.weeklyReportDayOfWeek)} at ${FitTrackNotificationManager.formatTime12Hour(prefs.weeklyReportHour, prefs.weeklyReportMinute)}",
+                    timeChipLabel = "${FitTrackNotificationManager.dayOfWeekShort(prefs.weeklyReportDayOfWeek)} ${FitTrackNotificationManager.formatTime12Hour(prefs.weeklyReportHour, prefs.weeklyReportMinute)}",
+                    onEditTimeClick = { editingReminderType = FitTrackReminderType.WEEKLY_REPORT },
                     checked = prefs.weeklyReportEnabled
                 ) { enabled ->
                     if (enabled && !hasNotificationPermission) {
@@ -513,19 +539,13 @@ fun ProfileScreen(
                             )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
-                        Button(
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(info.preferredDownloadUrl))
-                                context.startActivity(intent)
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("profile_download_apk_button")
-                        ) {
-                            Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Download Update (${info.tagName})")
-                        }
+                        InAppUpdateActionPanel(
+                            info = info,
+                            downloadState = apkDownloadState,
+                            onStartDownload = onStartInAppUpdate,
+                            onCancelDownload = onCancelInAppUpdate,
+                            onInstallReadyApk = onInstallDownloadedApk
+                        )
                     }
                     is AppUpdateStatus.UpToDate -> {
                         Text(
@@ -702,6 +722,116 @@ fun ProfileScreen(
             }
         )
     }
+
+    editingReminderType?.let { type ->
+        val prefs = state.preferences
+        val (initHour, initMin) = when (type) {
+            FitTrackReminderType.WORKOUT -> prefs.workoutReminderHour to prefs.workoutReminderMinute
+            FitTrackReminderType.MEAL -> prefs.mealReminderHour to prefs.mealReminderMinute
+            FitTrackReminderType.WEIGHT -> prefs.weightReminderHour to prefs.weightReminderMinute
+            FitTrackReminderType.WEEKLY_REPORT -> prefs.weeklyReportHour to prefs.weeklyReportMinute
+        }
+        ReminderTimePickerDialog(
+            type = type,
+            initialHour = initHour,
+            initialMinute = initMin,
+            initialDayOfWeek = prefs.weeklyReportDayOfWeek,
+            onDismiss = { editingReminderType = null },
+            onSave = { hour, minute, dayOfWeek ->
+                onUpdateReminderTime(type, hour, minute, dayOfWeek)
+                editingReminderType = null
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun ReminderTimePickerDialog(
+    type: FitTrackReminderType,
+    initialHour: Int,
+    initialMinute: Int,
+    initialDayOfWeek: Int,
+    onDismiss: () -> Unit,
+    onSave: (hour: Int, minute: Int, dayOfWeek: Int?) -> Unit
+) {
+    val timeState = rememberTimePickerState(
+        initialHour = initialHour.coerceIn(0, 23),
+        initialMinute = initialMinute.coerceIn(0, 59),
+        is24Hour = false
+    )
+    var selectedDay by remember(initialDayOfWeek) { mutableIntStateOf(initialDayOfWeek) }
+    val daysOfWeek = remember {
+        listOf(
+            Calendar.SUNDAY,
+            Calendar.MONDAY,
+            Calendar.TUESDAY,
+            Calendar.WEDNESDAY,
+            Calendar.THURSDAY,
+            Calendar.FRIDAY,
+            Calendar.SATURDAY
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Set ${type.title} Time",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if (type.isWeekly) {
+                    Text(
+                        text = "Choose weekly day:",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = FitTrackThemeExt.colors.mutedText,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        daysOfWeek.forEach { day ->
+                            FilterChip(
+                                selected = selectedDay == day,
+                                onClick = { selectedDay = day },
+                                label = { Text(FitTrackNotificationManager.dayOfWeekShort(day)) }
+                            )
+                        }
+                    }
+                }
+                TimePicker(state = timeState)
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onSave(
+                        timeState.hour,
+                        timeState.minute,
+                        if (type.isWeekly) selectedDay else null
+                    )
+                },
+                modifier = Modifier.testTag("save_reminder_time_button")
+            ) {
+                Text("Save Time")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 @Composable
@@ -721,13 +851,15 @@ private fun ProfileInfoRow(label: String, value: String) {
 private fun PreferenceToggleRow(
     label: String,
     subtitle: String = "",
+    timeChipLabel: String? = null,
+    onEditTimeClick: (() -> Unit)? = null,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 5.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -739,6 +871,35 @@ private fun PreferenceToggleRow(
                     style = MaterialTheme.typography.labelSmall,
                     color = FitTrackThemeExt.colors.mutedText
                 )
+            }
+            if (timeChipLabel != null && onEditTimeClick != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Surface(
+                    onClick = onEditTimeClick,
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+                    modifier = Modifier.testTag("edit_time_${label.lowercase().replace(" ", "_")}")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.AccessTime,
+                            contentDescription = "Edit reminder time",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "$timeChipLabel • Change",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
             }
         }
         Spacer(modifier = Modifier.width(8.dp))

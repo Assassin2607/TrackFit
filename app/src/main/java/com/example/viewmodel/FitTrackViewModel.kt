@@ -47,9 +47,13 @@ import com.example.domain.model.PhotoType
 import com.example.domain.model.SyncState
 import com.example.domain.model.UnitSystem
 import com.example.notifications.FitTrackNotificationManager
+import com.example.notifications.FitTrackReminderType
 import com.example.BuildConfig
+import com.example.data.remote.ApkDownloadState
+import com.example.data.remote.AppUpdateInfo
 import com.example.data.remote.AppUpdateStatus
 import com.example.data.remote.GitHubUpdateChecker
+import com.example.data.remote.InAppApkUpdater
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -61,6 +65,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import java.io.File
+import java.util.Calendar
 import java.util.UUID
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -222,22 +229,45 @@ class FitTrackViewModel(
     private val _appUpdateStatus = MutableStateFlow<AppUpdateStatus>(AppUpdateStatus.Idle)
     val appUpdateStatus: StateFlow<AppUpdateStatus> = _appUpdateStatus.asStateFlow()
 
+    private val _apkDownloadState = MutableStateFlow<ApkDownloadState>(ApkDownloadState.Idle)
+    val apkDownloadState: StateFlow<ApkDownloadState> = _apkDownloadState.asStateFlow()
+
     private val _updateBannerDismissed = MutableStateFlow(false)
     val updateBannerDismissed: StateFlow<Boolean> = _updateBannerDismissed.asStateFlow()
 
     private var timerJob: Job? = null
+    private var apkDownloadJob: Job? = null
 
     init {
         viewModelScope.launch {
-            repository.initializeUserSession(currentUserId)
-            _isInitialized.value = true
+            // Phase 1: Instant local Room SQLite setup (<50ms) — never blocks offline
+            val hasLocalProfile = repository.initializeLocalSession(currentUserId)
+            if (hasLocalProfile) {
+                _isInitialized.value = true
+                // Phase 2: Background cloud sync without delaying UI
+                launch { repository.syncCloudSession(currentUserId) }
+            } else {
+                // Brand-new device install: attempt fast bounded cloud restore if online, else open immediately
+                if (repository.isNetworkAvailable()) {
+                    withTimeoutOrNull(4_500L) {
+                        repository.syncCloudSession(currentUserId)
+                    }
+                }
+                _isInitialized.value = true
+            }
+
+            // Phase 3: Sync local reminders immediately
             val currentPrefs = preferencesManager.preferencesFlow.first()
             FitTrackNotificationManager.syncScheduledReminders(appContext, currentPrefs)
-            val effectiveRepo = resolveEffectiveGitHubRepo()
-            if (effectiveRepo.isNotBlank()) {
-                checkForAppUpdates(manual = false, repoOverride = effectiveRepo)
-            } else {
-                _appUpdateStatus.value = AppUpdateStatus.Unconfigured
+
+            // Phase 4: Non-blocking update check only when online
+            launch {
+                val effectiveRepo = resolveEffectiveGitHubRepo()
+                if (effectiveRepo.isBlank()) {
+                    _appUpdateStatus.value = AppUpdateStatus.Unconfigured
+                } else if (repository.isNetworkAvailable()) {
+                    checkForAppUpdates(manual = false, repoOverride = effectiveRepo)
+                }
             }
         }
     }
@@ -381,9 +411,18 @@ class FitTrackViewModel(
         val last7Keys = (0..6).map { FitnessCalculations.dateKeyDaysAgo(it) }.toSet()
         val last30Keys = (0..29).map { FitnessCalculations.dateKeyDaysAgo(it) }.toSet()
 
-        val workoutsThisWeek = training.sessions.count { it.dateKey in last7Keys }
+        // Respect optional non-destructive 7-Day Volume reset baseline (full history preserved in Workout History & Progress)
+        val volResetDate = core.prefs.volumeResetDateKey
+        val volResetEpoch = core.prefs.volumeResetEpochMs
+        val effectiveLast7Sessions = training.sessions.filter { session ->
+            session.dateKey in last7Keys &&
+                (volResetDate.isBlank() || session.dateKey >= volResetDate) &&
+                (volResetEpoch <= 0L || session.completedAtEpochMs >= volResetEpoch)
+        }
+
+        val workoutsThisWeek = effectiveLast7Sessions.size
         val dailyVol = todayWorkouts.sumOf { it.totalVolumeKg }
-        val weeklyVol = training.sessions.filter { it.dateKey in last7Keys }.sumOf { it.totalVolumeKg }
+        val weeklyVol = effectiveLast7Sessions.sumOf { it.totalVolumeKg }
         val monthlyVol = training.sessions.filter { it.dateKey in last30Keys }.sumOf { it.totalVolumeKg }
 
         val sessionIdDateMap = training.sessions.associate { it.id to it.dateKey }
@@ -439,6 +478,7 @@ class FitTrackViewModel(
         )
 
         val goalType = GoalType.fromNameSafe(profile?.goalType)
+        // Full weight history is preserved for Progress tab charts & analytics
         val weightPoints = metrics.weights.map { WeightPoint(it.dateKey, it.weightKg, it.recordedAtEpochMs) }
         val weightTrend = AnalyticsEngines.calculateWeightTrend(
             points = weightPoints,
@@ -446,18 +486,49 @@ class FitTrackViewModel(
             goalType = goalType
         )
 
-        // Calorie-deficit daily estimated weight progression from scale anchor(s) + nutrition logs
+        // Calorie-deficit daily estimated weight progression (respects optional non-destructive Weight & Trend reset baseline)
+        val wtResetDate = core.prefs.weightTrendResetDateKey
+        val wtResetEpoch = core.prefs.weightTrendResetEpochMs
         val orderedLast30Keys = (29 downTo 0).map { FitnessCalculations.dateKeyDaysAgo(it) }
+        val effectiveOrderedKeys = if (wtResetDate.isNotBlank()) {
+            orderedLast30Keys.filter { it >= wtResetDate }.ifEmpty { listOf(todayKey) }
+        } else {
+            orderedLast30Keys
+        }
+
+        val effectiveWeightPoints = if (wtResetDate.isNotBlank() || wtResetEpoch > 0L) {
+            weightPoints.filter { pt ->
+                (wtResetDate.isBlank() || pt.dateKey >= wtResetDate) &&
+                    (wtResetEpoch <= 0L || pt.epochMs >= wtResetEpoch)
+            }
+        } else {
+            weightPoints
+        }
+        val anchorFallbackWeightKg = weightPoints.lastOrNull()?.weightKg ?: weightKg
+
         val foodCaloriesByDay = nutrition.logs
+            .filter { log ->
+                (wtResetDate.isBlank() || log.dateKey >= wtResetDate) &&
+                    (wtResetEpoch <= 0L || log.loggedAtEpochMs >= wtResetEpoch)
+            }
             .groupBy { it.dateKey }
             .mapValues { (_, logs) -> logs.sumOf { it.calories }.roundToInt() }
         val workoutBurnByDay = training.sessions
+            .filter { s ->
+                (wtResetDate.isBlank() || s.dateKey >= wtResetDate) &&
+                    (wtResetEpoch <= 0L || s.completedAtEpochMs >= wtResetEpoch)
+            }
             .groupBy { it.dateKey }
             .mapValues { (_, sessions) -> sessions.sumOf { it.estimatedCalories } }
         val cardioBurnByDay = training.cardio
+            .filter { c ->
+                (wtResetDate.isBlank() || c.dateKey >= wtResetDate) &&
+                    (wtResetEpoch <= 0L || c.startedAtEpochMs >= wtResetEpoch)
+            }
             .groupBy { it.dateKey }
             .mapValues { (_, cardio) -> cardio.sumOf { it.caloriesEstimated } }
-        val dailyInputsMap = orderedLast30Keys.associateWith { dk ->
+
+        val dailyInputsMap = effectiveOrderedKeys.associateWith { dk ->
             DailyNutritionActivityInput(
                 dateKey = dk,
                 foodCalories = foodCaloriesByDay[dk] ?: 0,
@@ -466,15 +537,15 @@ class FitTrackViewModel(
             )
         }
         val estimatedWeight = AnalyticsEngines.calculateCalorieEstimatedWeight(
-            weightLogs = weightPoints,
-            fallbackWeightKg = weightKg,
+            weightLogs = effectiveWeightPoints,
+            fallbackWeightKg = anchorFallbackWeightKg,
             heightCm = profile?.heightCm ?: 175.0,
             age = profile?.age ?: 26,
             gender = Gender.fromNameSafe(profile?.gender),
             activityLevel = ActivityLevel.fromNameSafe(profile?.activityLevel),
             dailyLogsByDateKey = dailyInputsMap,
             todayDateKey = todayKey,
-            orderedDateKeys = orderedLast30Keys
+            orderedDateKeys = effectiveOrderedKeys
         )
 
         val startWeight = profile?.startingWeightKg ?: metrics.weights.firstOrNull()?.weightKg ?: weightKg
@@ -735,6 +806,95 @@ class FitTrackViewModel(
         _updateBannerDismissed.value = true
     }
 
+    fun startInAppUpdate(info: AppUpdateInfo) {
+        val apkUrl = info.apkDownloadUrl
+        if (apkUrl.isNullOrBlank()) {
+            _apkDownloadState.value = ApkDownloadState.Error("No direct APK attached to ${info.tagName}.")
+            postMessage("No APK file found in release ${info.tagName}.")
+            return
+        }
+        apkDownloadJob?.cancel()
+        apkDownloadJob = viewModelScope.launch {
+            _apkDownloadState.value = ApkDownloadState.Downloading(
+                tagName = info.tagName,
+                progressPercent = 0,
+                downloadedBytes = 0L,
+                totalBytes = 0L
+            )
+            val result = InAppApkUpdater.downloadApk(
+                context = appContext,
+                apkUrl = apkUrl,
+                tagName = info.tagName,
+                onProgress = { pct, downloaded, total ->
+                    _apkDownloadState.value = ApkDownloadState.Downloading(
+                        tagName = info.tagName,
+                        progressPercent = pct,
+                        downloadedBytes = downloaded,
+                        totalBytes = total
+                    )
+                }
+            )
+            result.onSuccess { apkFile ->
+                triggerApkInstall(info.tagName, apkFile)
+            }.onFailure { err ->
+                val msg = err.localizedMessage ?: "Download failed. Check your connection."
+                _apkDownloadState.value = ApkDownloadState.Error(msg)
+                postMessage("Update download failed: $msg")
+            }
+        }
+    }
+
+    fun cancelInAppUpdate() {
+        apkDownloadJob?.cancel()
+        apkDownloadJob = null
+        _apkDownloadState.value = ApkDownloadState.Idle
+    }
+
+    fun installDownloadedApk() {
+        val current = _apkDownloadState.value
+        val (tagName, path) = when (current) {
+            is ApkDownloadState.ReadyToInstall -> current.tagName to current.apkFilePath
+            is ApkDownloadState.NeedsInstallPermission -> current.tagName to current.apkFilePath
+            else -> return
+        }
+        val file = File(path)
+        if (!file.exists()) {
+            _apkDownloadState.value = ApkDownloadState.Error("Downloaded APK was cleared. Tap Update to download again.")
+            return
+        }
+        if (!InAppApkUpdater.canRequestPackageInstalls(appContext)) {
+            InAppApkUpdater.openInstallUnknownAppsSettings(appContext)
+            return
+        }
+        triggerApkInstall(tagName, file)
+    }
+
+    fun retryInstallIfPermittedOnResume() {
+        val current = _apkDownloadState.value
+        if (current is ApkDownloadState.NeedsInstallPermission &&
+            InAppApkUpdater.canRequestPackageInstalls(appContext)
+        ) {
+            val file = File(current.apkFilePath)
+            if (file.exists()) {
+                triggerApkInstall(current.tagName, file)
+            }
+        }
+    }
+
+    private fun triggerApkInstall(tagName: String, apkFile: File) {
+        if (!InAppApkUpdater.canRequestPackageInstalls(appContext)) {
+            _apkDownloadState.value = ApkDownloadState.NeedsInstallPermission(tagName, apkFile.absolutePath)
+            postMessage("Allow FitTrack to install updates once, then tap Install Update.")
+            return
+        }
+        val launched = InAppApkUpdater.launchSystemPackageInstaller(appContext, apkFile)
+        if (launched) {
+            _apkDownloadState.value = ApkDownloadState.ReadyToInstall(tagName, apkFile.absolutePath)
+        } else {
+            _apkDownloadState.value = ApkDownloadState.Error("Could not launch Android package installer.")
+        }
+    }
+
     fun updateReminderPrefs(
         workout: Boolean? = null,
         meal: Boolean? = null,
@@ -746,6 +906,35 @@ class FitTrackViewModel(
             preferencesManager.setReminderPreference(workout, meal, weight, weeklyReport, prAlerts)
             val updated = preferencesManager.preferencesFlow.first()
             FitTrackNotificationManager.syncScheduledReminders(appContext, updated)
+        }
+    }
+
+    fun updateReminderTime(
+        type: FitTrackReminderType,
+        hour: Int,
+        minute: Int,
+        dayOfWeek: Int? = null
+    ) {
+        viewModelScope.launch {
+            when (type) {
+                FitTrackReminderType.WORKOUT -> preferencesManager.setWorkoutReminderTime(hour, minute)
+                FitTrackReminderType.MEAL -> preferencesManager.setMealReminderTime(hour, minute)
+                FitTrackReminderType.WEIGHT -> preferencesManager.setWeightReminderTime(hour, minute)
+                FitTrackReminderType.WEEKLY_REPORT -> preferencesManager.setWeeklyReportTime(
+                    dayOfWeek = dayOfWeek ?: Calendar.SUNDAY,
+                    hour = hour,
+                    minute = minute
+                )
+            }
+            val updated = preferencesManager.preferencesFlow.first()
+            FitTrackNotificationManager.syncScheduledReminders(appContext, updated)
+            val timeLabel = FitTrackNotificationManager.formatTime12Hour(hour, minute)
+            val prefix = if (type == FitTrackReminderType.WEEKLY_REPORT) {
+                "${FitTrackNotificationManager.dayOfWeekLabel(dayOfWeek ?: updated.weeklyReportDayOfWeek)} at "
+            } else {
+                "Daily at "
+            }
+            postMessage("${type.title} scheduled: $prefix$timeLabel")
         }
     }
 
@@ -762,6 +951,36 @@ class FitTrackViewModel(
             postMessage("Test notification sent! Check your notification shade.")
         } else {
             postMessage("Enable notification permission first to receive alerts.")
+        }
+    }
+
+    // --- Non-Destructive Baseline Resets (Preserves Full History in Workouts & Progress) ---
+
+    fun resetSevenDayVolume(dateKey: String, epochMs: Long) {
+        viewModelScope.launch {
+            preferencesManager.setVolumeReset(dateKey, epochMs)
+            postMessage("7-Day Volume reset from $dateKey (full history preserved).")
+        }
+    }
+
+    fun clearSevenDayVolumeReset() {
+        viewModelScope.launch {
+            preferencesManager.setVolumeReset("", 0L)
+            postMessage("7-Day Volume restored to full rolling 7 days.")
+        }
+    }
+
+    fun resetWeightAndTrend(dateKey: String, epochMs: Long) {
+        viewModelScope.launch {
+            preferencesManager.setWeightTrendReset(dateKey, epochMs)
+            postMessage("Weight & Trend reset from $dateKey (Progress history preserved).")
+        }
+    }
+
+    fun clearWeightAndTrendReset() {
+        viewModelScope.launch {
+            preferencesManager.setWeightTrendReset("", 0L)
+            postMessage("Weight & Trend restored to full history.")
         }
     }
 
@@ -1333,5 +1552,6 @@ class FitTrackViewModel(
     override fun onCleared() {
         super.onCleared()
         timerJob?.cancel()
+        apkDownloadJob?.cancel()
     }
 }

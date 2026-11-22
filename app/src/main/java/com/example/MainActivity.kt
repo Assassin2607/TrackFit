@@ -53,6 +53,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -64,7 +65,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -200,8 +204,21 @@ private fun FitTrackAuthenticatedShell(
     val restTimer by viewModel.restTimer.collectAsStateWithLifecycle()
     val snackbarMessage by viewModel.snackbarMessage.collectAsStateWithLifecycle()
     val appUpdateStatus by viewModel.appUpdateStatus.collectAsStateWithLifecycle()
+    val apkDownloadState by viewModel.apkDownloadState.collectAsStateWithLifecycle()
     val updateBannerDismissed by viewModel.updateBannerDismissed.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Auto-resume in-app APK installation if user just enabled "Install unknown apps" in Settings
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.retryInstallIfPermittedOnResume()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(snackbarMessage) {
         snackbarMessage?.let { msg ->
@@ -268,6 +285,26 @@ private fun FitTrackAuthenticatedShell(
     val currentRoute = backStackEntry?.destination?.route ?: FitTrackTab.HOME.route
     val activeTab = FitTrackTab.fromRoute(currentRoute)
     var showCardioDialog by remember { mutableStateOf(false) }
+
+    // Track last-displayed Home score so returning to Home after a log animates smoothly from old -> new
+    var lastSeenHomeScore by remember { mutableStateOf<Int?>(null) }
+    var scoreAnimateFrom by remember { mutableIntStateOf(state.dailyScore.totalScore) }
+    var scoreAnimationTrigger by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(activeTab, state.dailyScore.totalScore) {
+        if (activeTab == FitTrackTab.HOME) {
+            val current = state.dailyScore.totalScore
+            val prev = lastSeenHomeScore
+            if (prev == null) {
+                lastSeenHomeScore = current
+                scoreAnimateFrom = current
+            } else if (current != prev) {
+                scoreAnimateFrom = prev
+                scoreAnimationTrigger += 1
+                lastSeenHomeScore = current
+            }
+        }
+    }
 
     fun navigateToTab(tab: FitTrackTab) {
         if (currentRoute == tab.route) return
@@ -415,11 +452,19 @@ private fun FitTrackAuthenticatedShell(
                                     DashboardScreen(
                                         state = state,
                                         appUpdateStatus = appUpdateStatus,
+                                        apkDownloadState = apkDownloadState,
                                         updateBannerDismissed = updateBannerDismissed,
+                                        scoreAnimateFrom = scoreAnimateFrom,
+                                        scoreAnimationTrigger = scoreAnimationTrigger,
+                                        onStartInAppUpdate = viewModel::startInAppUpdate,
+                                        onCancelInAppUpdate = viewModel::cancelInAppUpdate,
+                                        onInstallDownloadedApk = viewModel::installDownloadedApk,
                                         onDismissUpdateBanner = viewModel::dismissUpdateBanner,
                                         onSyncClick = viewModel::triggerManualSync,
                                         onLogWeight = viewModel::logWeight,
                                         onLogWater = viewModel::logWater,
+                                        onResetWeightTrend = viewModel::resetWeightAndTrend,
+                                        onClearWeightTrendReset = viewModel::clearWeightAndTrendReset,
                                         onNavigateToNutrition = { navigateToTab(FitTrackTab.NUTRITION) },
                                         onNavigateToProgress = { navigateToTab(FitTrackTab.PROGRESS) }
                                     )
@@ -447,7 +492,9 @@ private fun FitTrackAuthenticatedShell(
                                             )
                                         },
                                         onDeleteCardio = viewModel::deleteCardioSession,
-                                        onDeleteWorkoutSession = viewModel::deleteWorkoutSession
+                                        onDeleteWorkoutSession = viewModel::deleteWorkoutSession,
+                                        onResetSevenDayVolume = viewModel::resetSevenDayVolume,
+                                        onClearSevenDayVolumeReset = viewModel::clearSevenDayVolumeReset
                                     )
                                 }
                             }
@@ -484,12 +531,17 @@ private fun FitTrackAuthenticatedShell(
                                     ProfileScreen(
                                         state = state,
                                         appUpdateStatus = appUpdateStatus,
+                                        apkDownloadState = apkDownloadState,
                                         bundledUpdateSourceConfigured = viewModel.defaultGitHubRepo.isNotBlank(),
                                         onSaveGitHubRepo = viewModel::saveGitHubRepoAndCheck,
                                         onCheckForUpdates = { viewModel.checkForAppUpdates(manual = true) },
+                                        onStartInAppUpdate = viewModel::startInAppUpdate,
+                                        onCancelInAppUpdate = viewModel::cancelInAppUpdate,
+                                        onInstallDownloadedApk = viewModel::installDownloadedApk,
                                         onUpdateProfile = viewModel::updateProfile,
                                         onUnitSystemChange = viewModel::setUnitSystem,
                                         onUpdateReminders = viewModel::updateReminderPrefs,
+                                        onUpdateReminderTime = viewModel::updateReminderTime,
                                         onSyncReminders = viewModel::syncRemindersNow,
                                         onSendTestNotification = viewModel::sendTestNotification,
                                         onManualSync = viewModel::triggerManualSync,

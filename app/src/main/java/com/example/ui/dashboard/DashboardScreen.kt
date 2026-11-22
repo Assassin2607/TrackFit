@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.MonitorWeight
+import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.TrendingDown
@@ -42,6 +43,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -65,11 +67,12 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.data.remote.ApkDownloadState
+import com.example.data.remote.AppUpdateInfo
 import com.example.data.remote.AppUpdateStatus
 import com.example.domain.calc.EstimatedWeightDirection
 import com.example.domain.calc.EstimatedWeightSummary
@@ -78,7 +81,9 @@ import com.example.domain.model.GoalType
 import com.example.domain.model.UnitSystem
 import com.example.ui.components.FitTrackCard
 import com.example.ui.components.Hydration3DRing
+import com.example.ui.components.InAppUpdateActionPanel
 import com.example.ui.components.MacroProgressBar
+import com.example.ui.components.MetricBaselineResetDialog
 import com.example.ui.components.SyncStatusBadge
 import com.example.ui.theme.FitTrackThemeExt
 import com.example.ui.theme.MonoMetricMedium
@@ -91,15 +96,22 @@ import kotlin.math.max
 fun DashboardScreen(
     state: FitTrackUiState,
     appUpdateStatus: AppUpdateStatus = AppUpdateStatus.Idle,
+    apkDownloadState: ApkDownloadState = ApkDownloadState.Idle,
     updateBannerDismissed: Boolean = false,
+    scoreAnimateFrom: Int = state.dailyScore.totalScore,
+    scoreAnimationTrigger: Int = 0,
+    onStartInAppUpdate: (AppUpdateInfo) -> Unit = {},
+    onCancelInAppUpdate: () -> Unit = {},
+    onInstallDownloadedApk: () -> Unit = {},
     onDismissUpdateBanner: () -> Unit = {},
     onSyncClick: () -> Unit,
     onLogWeight: (Double, String) -> Unit,
     onLogWater: (Int) -> Unit,
+    onResetWeightTrend: (String, Long) -> Unit = { _, _ -> },
+    onClearWeightTrendReset: () -> Unit = {},
     onNavigateToNutrition: () -> Unit,
     onNavigateToProgress: () -> Unit
 ) {
-    val context = LocalContext.current
     val profile = state.profile
     val unit = state.preferences.unitSystem
     val goalType = GoalType.fromNameSafe(profile?.goalType)
@@ -108,6 +120,7 @@ fun DashboardScreen(
     var showScoreBreakdown by remember { mutableStateOf(false) }
     var showWeightDialog by remember { mutableStateOf(false) }
     var showWeightEstimateDialog by remember { mutableStateOf(false) }
+    var showWeightResetDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier
@@ -162,7 +175,7 @@ fun DashboardScreen(
             }
         }
 
-        // GitHub Release Update Banner (shown only when a newer release exists)
+        // In-App GitHub Release Update Banner (downloads & installs inside FitTrack — no Chrome redirect)
         if (appUpdateStatus is AppUpdateStatus.UpdateAvailable && !updateBannerDismissed) {
             item {
                 val info = appUpdateStatus.info
@@ -186,39 +199,33 @@ fun DashboardScreen(
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                             Text(
-                                text = "A new FitTrack APK is ready on GitHub Releases.",
+                                text = "Download & install directly inside FitTrack.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
                             )
                         }
                     }
                     Spacer(modifier = Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(info.preferredDownloadUrl))
-                                context.startActivity(intent)
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("download_update_button")
-                        ) {
-                            Text("Download APK")
-                        }
-                        TextButton(onClick = onDismissUpdateBanner) {
-                            Text("Later")
-                        }
-                    }
+                    InAppUpdateActionPanel(
+                        info = info,
+                        downloadState = apkDownloadState,
+                        onStartDownload = onStartInAppUpdate,
+                        onCancelDownload = onCancelInAppUpdate,
+                        onInstallReadyApk = onInstallDownloadedApk,
+                        onDismissBanner = onDismissUpdateBanner
+                    )
                 }
             }
         }
 
-        // 1. HERO: Today's Score — Game-HUD Rank Crest + 20-Segment Power Gauge + 5 Quest Bars
+        // 1. HERO: Today's Score — Game-HUD Rank Crest + Smooth 3D Orbital Energy Ring + 5 Quest Bars
         item {
             GameScoreHeroCard(
                 dailyScore = state.dailyScore,
                 activeStreakDays = state.activeStreakDays,
                 goalType = goalType,
+                animateFromScore = scoreAnimateFrom,
+                animationTrigger = scoreAnimationTrigger,
                 onClick = { showScoreBreakdown = true }
             )
         }
@@ -294,11 +301,30 @@ fun DashboardScreen(
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
-                            Text(
-                                text = "Weight & Trend",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Weight & Trend",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (state.preferences.weightTrendResetDateKey.isNotBlank()) {
+                                    Surface(
+                                        shape = RoundedCornerShape(999.dp),
+                                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.45f))
+                                    ) {
+                                        Text(
+                                            text = "From ${state.preferences.weightTrendResetDateKey.takeLast(5)}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.secondary,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                }
+                            }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     imageVector = directionIcon,
@@ -316,19 +342,30 @@ fun DashboardScreen(
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = { showWeightDialog = true },
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        ),
-                        modifier = Modifier.testTag("quick_weigh_in_button")
-                    ) {
-                        Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Weigh In", style = MaterialTheme.typography.labelMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { showWeightResetDialog = true },
+                            modifier = Modifier.testTag("reset_weight_trend_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.RestartAlt,
+                                contentDescription = "Reset Weight and Trend baseline",
+                                tint = ext.mutedText
+                            )
+                        }
+                        Button(
+                            onClick = { showWeightDialog = true },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            modifier = Modifier.testTag("quick_weigh_in_button")
+                        ) {
+                            Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Weigh In", style = MaterialTheme.typography.labelMedium)
+                        }
                     }
                 }
 
@@ -727,6 +764,18 @@ fun DashboardScreen(
                     Text("Got it")
                 }
             }
+        )
+    }
+
+    if (showWeightResetDialog) {
+        MetricBaselineResetDialog(
+            title = "Reset Weight & Trend",
+            preservedNote = "Start your daily estimated weight and trend fresh from right now, Monday (first of week), or any day. All past weigh-ins stay safely saved in the Progress tab.",
+            activeResetDateKey = state.preferences.weightTrendResetDateKey,
+            activeResetEpochMs = state.preferences.weightTrendResetEpochMs,
+            onApplyReset = onResetWeightTrend,
+            onClearReset = onClearWeightTrendReset,
+            onDismiss = { showWeightResetDialog = false }
         )
     }
 

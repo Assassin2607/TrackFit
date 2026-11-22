@@ -18,48 +18,49 @@ import com.example.MainActivity
 import com.example.R
 import com.example.data.prefs.UserPreferences
 import java.util.Calendar
+import java.util.Locale
 
 enum class FitTrackReminderType(
     val requestCode: Int,
     val notificationId: Int,
     val title: String,
     val body: String,
-    val hourOfDay: Int,
-    val minute: Int,
-    val weeklyDayOfWeek: Int? = null
+    val defaultHourOfDay: Int,
+    val defaultMinute: Int,
+    val isWeekly: Boolean = false
 ) {
     WORKOUT(
         requestCode = 1001,
         notificationId = 2001,
         title = "Time to Train",
         body = "Your Gym & Home routines are ready in FitTrack. Keep your streak alive!",
-        hourOfDay = 18,
-        minute = 0
+        defaultHourOfDay = 18,
+        defaultMinute = 0
     ),
     MEAL(
         requestCode = 1002,
         notificationId = 2002,
         title = "Log Your Meals & Water",
         body = "Track today's calories, protein, and hydration to keep your Daily Score climbing.",
-        hourOfDay = 13,
-        minute = 0
+        defaultHourOfDay = 13,
+        defaultMinute = 0
     ),
     WEIGHT(
         requestCode = 1003,
         notificationId = 2003,
         title = "Morning Weigh-In Check",
         body = "Step on the scale or check your calorie-estimated weight trend in FitTrack.",
-        hourOfDay = 7,
-        minute = 30
+        defaultHourOfDay = 7,
+        defaultMinute = 30
     ),
     WEEKLY_REPORT(
         requestCode = 1004,
         notificationId = 2004,
         title = "Weekly Progress Summary Ready",
         body = "Review your 7-day weight trajectory, strength volume, and nutrition consistency.",
-        hourOfDay = 18,
-        minute = 0,
-        weeklyDayOfWeek = Calendar.SUNDAY
+        defaultHourOfDay = 18,
+        defaultMinute = 0,
+        isWeekly = true
     );
 
     companion object {
@@ -69,7 +70,7 @@ enum class FitTrackReminderType(
 }
 
 /**
- * Play-Policy-compliant Android notification manager and inexact repeating reminder scheduler.
+ * Play-Policy-compliant Android notification manager and customizable inexact repeating reminder scheduler.
  * Uses POST_NOTIFICATIONS runtime checks (Android 13+) and AlarmManager.setInexactRepeating
  * without requesting restricted exact-alarm permissions.
  */
@@ -119,17 +120,83 @@ object FitTrackNotificationManager {
         }
     }
 
+    fun formatTime12Hour(hourOfDay: Int, minute: Int): String {
+        val safeHour = hourOfDay.coerceIn(0, 23)
+        val safeMinute = minute.coerceIn(0, 59)
+        val amPm = if (safeHour < 12) "AM" else "PM"
+        val displayHour = when {
+            safeHour == 0 -> 12
+            safeHour > 12 -> safeHour - 12
+            else -> safeHour
+        }
+        return String.format(Locale.US, "%d:%02d %s", displayHour, safeMinute, amPm)
+    }
+
+    fun dayOfWeekLabel(dayOfWeek: Int): String = when (dayOfWeek) {
+        Calendar.SUNDAY -> "Sundays"
+        Calendar.MONDAY -> "Mondays"
+        Calendar.TUESDAY -> "Tuesdays"
+        Calendar.WEDNESDAY -> "Wednesdays"
+        Calendar.THURSDAY -> "Thursdays"
+        Calendar.FRIDAY -> "Fridays"
+        Calendar.SATURDAY -> "Saturdays"
+        else -> "Sundays"
+    }
+
+    fun dayOfWeekShort(dayOfWeek: Int): String = when (dayOfWeek) {
+        Calendar.SUNDAY -> "Sun"
+        Calendar.MONDAY -> "Mon"
+        Calendar.TUESDAY -> "Tue"
+        Calendar.WEDNESDAY -> "Wed"
+        Calendar.THURSDAY -> "Thu"
+        Calendar.FRIDAY -> "Fri"
+        Calendar.SATURDAY -> "Sat"
+        else -> "Sun"
+    }
+
     fun syncScheduledReminders(context: Context, prefs: UserPreferences) {
         ensureChannels(context)
         val canNotify = hasNotificationPermission(context)
 
-        updateReminderAlarm(context, FitTrackReminderType.WORKOUT, canNotify && prefs.workoutReminderEnabled)
-        updateReminderAlarm(context, FitTrackReminderType.MEAL, canNotify && prefs.mealReminderEnabled)
-        updateReminderAlarm(context, FitTrackReminderType.WEIGHT, canNotify && prefs.weightReminderEnabled)
-        updateReminderAlarm(context, FitTrackReminderType.WEEKLY_REPORT, canNotify && prefs.weeklyReportEnabled)
+        updateReminderAlarm(
+            context = context,
+            type = FitTrackReminderType.WORKOUT,
+            enabled = canNotify && prefs.workoutReminderEnabled,
+            hourOfDay = prefs.workoutReminderHour,
+            minute = prefs.workoutReminderMinute
+        )
+        updateReminderAlarm(
+            context = context,
+            type = FitTrackReminderType.MEAL,
+            enabled = canNotify && prefs.mealReminderEnabled,
+            hourOfDay = prefs.mealReminderHour,
+            minute = prefs.mealReminderMinute
+        )
+        updateReminderAlarm(
+            context = context,
+            type = FitTrackReminderType.WEIGHT,
+            enabled = canNotify && prefs.weightReminderEnabled,
+            hourOfDay = prefs.weightReminderHour,
+            minute = prefs.weightReminderMinute
+        )
+        updateReminderAlarm(
+            context = context,
+            type = FitTrackReminderType.WEEKLY_REPORT,
+            enabled = canNotify && prefs.weeklyReportEnabled,
+            hourOfDay = prefs.weeklyReportHour,
+            minute = prefs.weeklyReportMinute,
+            weeklyDayOfWeek = prefs.weeklyReportDayOfWeek
+        )
     }
 
-    private fun updateReminderAlarm(context: Context, type: FitTrackReminderType, enabled: Boolean) {
+    private fun updateReminderAlarm(
+        context: Context,
+        type: FitTrackReminderType,
+        enabled: Boolean,
+        hourOfDay: Int,
+        minute: Int,
+        weeklyDayOfWeek: Int? = null
+    ) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
         val intent = Intent(context, FitTrackReminderReceiver::class.java).apply {
             action = ACTION_FIRE_REMINDER
@@ -142,14 +209,20 @@ object FitTrackNotificationManager {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Cancel existing alarm before rescheduling with updated time
+        alarmManager.cancel(pendingIntent)
+
         if (!enabled) {
-            alarmManager.cancel(pendingIntent)
             pendingIntent.cancel()
             return
         }
 
-        val triggerAtMillis = computeNextTriggerMillis(type)
-        val intervalMillis = if (type.weeklyDayOfWeek != null) {
+        val triggerAtMillis = computeNextTriggerMillis(
+            hourOfDay = hourOfDay,
+            minute = minute,
+            weeklyDayOfWeek = if (type.isWeekly) (weeklyDayOfWeek ?: Calendar.SUNDAY) else null
+        )
+        val intervalMillis = if (type.isWeekly) {
             AlarmManager.INTERVAL_DAY * 7L
         } else {
             AlarmManager.INTERVAL_DAY
@@ -163,17 +236,23 @@ object FitTrackNotificationManager {
         )
     }
 
-    private fun computeNextTriggerMillis(type: FitTrackReminderType): Long {
-        val now = Calendar.getInstance()
+    fun computeNextTriggerMillis(
+        hourOfDay: Int,
+        minute: Int,
+        weeklyDayOfWeek: Int? = null,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Long {
+        val now = Calendar.getInstance().apply { timeInMillis = nowMillis }
         val next = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, type.hourOfDay)
-            set(Calendar.MINUTE, type.minute)
+            timeInMillis = nowMillis
+            set(Calendar.HOUR_OF_DAY, hourOfDay.coerceIn(0, 23))
+            set(Calendar.MINUTE, minute.coerceIn(0, 59))
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }
 
-        if (type.weeklyDayOfWeek != null) {
-            next.set(Calendar.DAY_OF_WEEK, type.weeklyDayOfWeek)
+        if (weeklyDayOfWeek != null) {
+            next.set(Calendar.DAY_OF_WEEK, weeklyDayOfWeek.coerceIn(Calendar.SUNDAY, Calendar.SATURDAY))
             if (!next.after(now)) {
                 next.add(Calendar.WEEK_OF_YEAR, 1)
             }
@@ -236,10 +315,10 @@ object FitTrackNotificationManager {
         val notification = NotificationCompat.Builder(context, CHANNEL_PR_ALERTS)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("FitTrack Notifications Active")
-            .setContentText("Your workout, nutrition, weigh-in, and PR alerts are ready to go!")
+            .setContentText("Your personalized workout, meal, weigh-in, and PR alerts are ready!")
             .setStyle(
                 NotificationCompat.BigTextStyle()
-                    .bigText("Your workout, nutrition, weigh-in, and PR alerts are active and scheduled.")
+                    .bigText("Your personalized workout, meal, weigh-in, and PR alerts are active and scheduled.")
             )
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(createOpenAppIntent(context, NOTIFICATION_ID_TEST))

@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Replay
+import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material3.AlertDialog
@@ -81,6 +82,7 @@ import com.example.domain.model.MuscleGroup
 import com.example.domain.model.UnitSystem
 import com.example.ui.components.EmptyStateCard
 import com.example.ui.components.FitTrackCard
+import com.example.ui.components.MetricBaselineResetDialog
 import com.example.ui.components.SectionHeader
 import com.example.ui.theme.FitTrackThemeExt
 import com.example.ui.theme.MonoMetricMedium
@@ -117,7 +119,9 @@ fun WorkoutScreen(
     onOpenCardioDialog: () -> Unit,
     onRepeatCardio: (CardioSessionEntity) -> Unit,
     onDeleteCardio: (String) -> Unit,
-    onDeleteWorkoutSession: (String) -> Unit
+    onDeleteWorkoutSession: (String) -> Unit,
+    onResetSevenDayVolume: (String, Long) -> Unit = { _, _ -> },
+    onClearSevenDayVolumeReset: () -> Unit = {}
 ) {
     var selectedEnvironment by remember { mutableStateOf(TrainingEnvironment.GYM) }
     var selectedSegment by remember { mutableIntStateOf(0) }
@@ -129,6 +133,7 @@ fun WorkoutScreen(
     var showCreateTemplate by remember { mutableStateOf(false) }
     var showCreateExercise by remember { mutableStateOf(false) }
     var showSevenDayVolumeDialog by remember { mutableStateOf(false) }
+    var showVolumeResetDialog by remember { mutableStateOf(false) }
     var exerciseQuery by remember { mutableStateOf("") }
     var selectedMuscleFilter by remember { mutableStateOf<String?>(null) }
 
@@ -157,8 +162,26 @@ fun WorkoutScreen(
     val last7Keys = remember(state.selectedDateKey) {
         (0..6).map { FitnessCalculations.dateKeyDaysAgo(it) }.toSet()
     }
-    val homeSessionsLast7 = remember(visibleSessions, last7Keys) {
-        visibleSessions.filter { it.dateKey in last7Keys }
+    val volResetDate = state.preferences.volumeResetDateKey
+    val volResetEpoch = state.preferences.volumeResetEpochMs
+    val effectiveSessionsFor7Day = remember(state.workoutSessions, volResetDate, volResetEpoch) {
+        state.workoutSessions.filter { s ->
+            (volResetDate.isBlank() || s.dateKey >= volResetDate) &&
+                (volResetEpoch <= 0L || s.completedAtEpochMs >= volResetEpoch)
+        }
+    }
+    val effectiveCardioFor7Day = remember(state.cardioSessions, volResetDate, volResetEpoch) {
+        state.cardioSessions.filter { c ->
+            (volResetDate.isBlank() || c.dateKey >= volResetDate) &&
+                (volResetEpoch <= 0L || c.startedAtEpochMs >= volResetEpoch)
+        }
+    }
+    val homeSessionsLast7 = remember(visibleSessions, last7Keys, volResetDate, volResetEpoch) {
+        visibleSessions.filter { s ->
+            s.dateKey in last7Keys &&
+                (volResetDate.isBlank() || s.dateKey >= volResetDate) &&
+                (volResetEpoch <= 0L || s.completedAtEpochMs >= volResetEpoch)
+        }
     }
     val homeRepsLast7 = remember(homeSessionsLast7, state.allWorkoutSets) {
         val ids = homeSessionsLast7.map { it.id }.toSet()
@@ -259,20 +282,52 @@ fun WorkoutScreen(
                         .weight(1f)
                         .testTag("seven_day_volume_card")
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = if (isHomeMode) Icons.Rounded.Home else Icons.Rounded.FitnessCenter,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (isHomeMode) "7-DAY HOME REPS" else "7-DAY VOLUME",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.85f),
-                            fontWeight = FontWeight.Bold
-                        )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (isHomeMode) Icons.Rounded.Home else Icons.Rounded.FitnessCenter,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isHomeMode) "7-DAY HOME REPS" else "7-DAY VOLUME",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.85f),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Surface(
+                            onClick = { showVolumeResetDialog = true },
+                            shape = RoundedCornerShape(999.dp),
+                            color = Color.Black.copy(alpha = 0.25f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.30f)),
+                            modifier = Modifier.testTag("reset_seven_day_volume_button")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.RestartAlt,
+                                    contentDescription = "Reset 7-day volume baseline",
+                                    tint = WorkoutCreamText,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text(
+                                    text = "Reset",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = WorkoutCreamText,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
@@ -287,7 +342,11 @@ fun WorkoutScreen(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Tap for daily log ▸",
+                        text = if (volResetDate.isNotBlank()) {
+                            "Since ${volResetDate.takeLast(5)} • Daily log ▸"
+                        } else {
+                            "Tap for daily log ▸"
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = WorkoutCreamText.copy(alpha = 0.85f)
                     )
@@ -832,11 +891,28 @@ fun WorkoutScreen(
 
     if (showSevenDayVolumeDialog) {
         SevenDayVolumeProgressDialog(
-            workoutSessions = state.workoutSessions,
+            workoutSessions = effectiveSessionsFor7Day,
             allWorkoutSets = state.allWorkoutSets,
-            cardioSessions = state.cardioSessions,
+            cardioSessions = effectiveCardioFor7Day,
             unitSystem = unit,
+            activeResetDateKey = volResetDate,
+            onOpenResetDialog = {
+                showSevenDayVolumeDialog = false
+                showVolumeResetDialog = true
+            },
             onDismiss = { showSevenDayVolumeDialog = false }
+        )
+    }
+
+    if (showVolumeResetDialog) {
+        MetricBaselineResetDialog(
+            title = "Reset 7-Day Volume",
+            preservedNote = "Reset your 7-Day Volume / Home Reps counter to start fresh right now, from Monday (first of week), or any specific day. All past sessions remain safely saved in Workout History & Progress.",
+            activeResetDateKey = volResetDate,
+            activeResetEpochMs = volResetEpoch,
+            onApplyReset = onResetSevenDayVolume,
+            onClearReset = onClearSevenDayVolumeReset,
+            onDismiss = { showVolumeResetDialog = false }
         )
     }
 }
@@ -910,6 +986,8 @@ private fun SevenDayVolumeProgressDialog(
     allWorkoutSets: List<WorkoutSetEntity>,
     cardioSessions: List<CardioSessionEntity>,
     unitSystem: UnitSystem,
+    activeResetDateKey: String = "",
+    onOpenResetDialog: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val ext = FitTrackThemeExt.colors
@@ -949,18 +1027,35 @@ private fun SevenDayVolumeProgressDialog(
         containerColor = Color(0xFF1A0F18),
         titleContentColor = WorkoutCreamText,
         title = {
-            Column {
-                Text(
-                    text = "7-Day Workout Progress",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = WorkoutCreamText
-                )
-                Text(
-                    text = "${FitnessCalculations.formatVolume(total7DayVol, unitSystem)} • $activeDaysCount/7 active days",
-                    style = MonoMetricSmall,
-                    color = WorkoutRoyalBlueGlow
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "7-Day Workout Progress",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = WorkoutCreamText
+                    )
+                    Text(
+                        text = "${FitnessCalculations.formatVolume(total7DayVol, unitSystem)} • $activeDaysCount/7 active days" +
+                            if (activeResetDateKey.isNotBlank()) " (from $activeResetDateKey)" else "",
+                        style = MonoMetricSmall,
+                        color = WorkoutRoyalBlueGlow
+                    )
+                }
+                TextButton(onClick = onOpenResetDialog) {
+                    Icon(
+                        imageVector = Icons.Rounded.RestartAlt,
+                        contentDescription = null,
+                        tint = WorkoutCreamText,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("Reset", color = WorkoutCreamText)
+                }
             }
         },
         text = {

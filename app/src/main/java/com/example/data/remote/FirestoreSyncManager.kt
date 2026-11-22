@@ -1,6 +1,8 @@
 package com.example.data.remote
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import com.example.R
 import com.example.data.local.BodyMeasurementEntity
 import com.example.data.local.CardioSessionEntity
@@ -31,7 +33,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
 import java.io.File
+import java.io.IOException
 
 class FirestoreSyncManager(
     private val db: FirebaseFirestore,
@@ -80,17 +84,42 @@ class FirestoreSyncManager(
         }
     }
 
+    fun isNetworkAvailable(): Boolean {
+        val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return true
+        val activeNetwork = cm.activeNetwork ?: return false
+        val capabilities = cm.getNetworkCapabilities(activeNetwork) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
     suspend fun flushQueue(userId: String): Result<Unit> {
         val pending = localDb.syncQueueDao().getPendingForUser(userId)
         if (pending.isEmpty()) {
             _syncState.value = SyncState.Synced
             return Result.success(Unit)
         }
+        if (!isNetworkAvailable()) {
+            _syncState.value = SyncState.Pending(
+                count = pending.size,
+                lastError = "Offline — saved locally"
+            )
+            return Result.failure(IOException("Device is offline"))
+        }
         _syncState.value = SyncState.Syncing
 
         var lastFailure: Throwable? = null
         for (entry in pending) {
-            val result = processQueueEntry(userId, entry)
+            if (!isNetworkAvailable()) {
+                lastFailure = IOException("Connection lost while syncing")
+                break
+            }
+            val result = try {
+                withTimeout(8_000L) { processQueueEntry(userId, entry) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
             if (result.isSuccess) {
                 localDb.syncQueueDao().remove(entry.queueKey)
             } else {
@@ -103,6 +132,8 @@ class FirestoreSyncManager(
                         updatedAtEpochMs = System.currentTimeMillis()
                     )
                 )
+                // Stop looping immediately on timeout / unavailable network so we never stall offline
+                break
             }
         }
 
@@ -403,7 +434,11 @@ class FirestoreSyncManager(
      * restore their profile, templates, workouts, nutrition, and progress logs cleanly.
      */
     suspend fun pullCloudDataIntoLocal(userId: String): Result<Unit> {
+        if (!isNetworkAvailable()) {
+            return Result.failure(IOException("Offline — skipped cloud pull"))
+        }
         return try {
+            withTimeout(12_000L) {
             val uid = requireAuthenticatedUid(userId)
             val userDoc = db.collection("users").document(uid)
 
@@ -689,6 +724,7 @@ class FirestoreSyncManager(
             }
 
             Result.success(Unit)
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
