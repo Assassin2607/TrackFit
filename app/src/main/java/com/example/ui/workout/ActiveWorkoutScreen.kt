@@ -367,9 +367,20 @@ private fun ActiveSetRow(
                 onValueChange = { raw ->
                     val cleaned = raw.filter { it.isDigit() || it == '.' }.take(6)
                     weightText = cleaned
-                    cleaned.toDoubleOrNull()?.let { v ->
-                        onWeightChange(FitnessCalculations.displayToKg(v, unitSystem))
+                    if (cleaned.isBlank()) {
+                        onWeightChange(0.0)
+                    } else {
+                        cleaned.toDoubleOrNull()?.let { v ->
+                            onWeightChange(FitnessCalculations.displayToKg(v, unitSystem))
+                        }
                     }
+                },
+                placeholder = {
+                    Text(
+                        text = "BW",
+                        style = MonoMetricSmall,
+                        color = FitTrackThemeExt.colors.mutedText.copy(alpha = 0.7f)
+                    )
                 },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,

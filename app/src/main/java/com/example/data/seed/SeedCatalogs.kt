@@ -280,7 +280,65 @@ object SeedExerciseCatalog {
         // Core
         ex("ex_hanging_leg_raise", "Hanging Leg Raise", "CORE", "Hip Flexors", "Bodyweight", "Intermediate", "Curl pelvis upward toward ribs rather than simply swinging legs."),
         ex("ex_cable_crunch", "Kneeling Cable Crunch", "CORE", "", "Cable", "Beginner", "Flex thoracic spine downward while keeping hips stationary."),
-        ex("ex_plank", "Weighted Plank (Reps = Secs)", "CORE", "Shoulders", "Bodyweight", "Beginner", "Squeeze glutes and brace abs maintaining neutral spine.")
+        ex("ex_plank", "Forearm Plank (Reps = Secs)", "CORE", "Shoulders", "Bodyweight", "Beginner", "Squeeze glutes and brace abs maintaining a straight neutral spine."),
+
+        // --- Comprehensive Home & No-Equipment Bodyweight Catalog ---
+        // Home Chest
+        ex("ex_home_incline_pushup", "Incline Push-Ups (Hands Elevated)", "CHEST", "Lower Chest, Triceps", "Bodyweight", "Beginner", "Place hands on a sturdy bed, desk, or bench and lower chest cleanly with elbows at 45°."),
+        ex("ex_home_decline_pushup", "Decline Push-Ups (Feet Elevated)", "CHEST", "Upper Chest, Front Delts, Triceps", "Bodyweight", "Intermediate", "Elevate feet on a chair or couch, keep core braced, press powerfully through upper chest."),
+        ex("ex_home_diamond_pushup", "Diamond Push-Ups", "CHEST", "Triceps, Inner Chest", "Bodyweight", "Intermediate", "Form a diamond with thumbs and index fingers under sternum; keep elbows tucked."),
+        ex("ex_home_wide_pushup", "Wide-Grip Push-Ups", "CHEST", "Front Delts", "Bodyweight", "Beginner", "Set hands wider than shoulders for deeper pec stretch; pause briefly near floor."),
+        ex("ex_home_archer_pushup", "Archer Push-Ups", "CHEST", "Triceps, Shoulders, Core", "Bodyweight", "Advanced", "Shift weight onto one pressing arm while extending the opposite arm straight out."),
+
+        // Home Back & Posture
+        ex("ex_home_inverted_row", "Table / Towel Inverted Row", "BACK", "Biceps, Rear Delts, Core", "Home / Bodyweight", "Beginner", "Grip a sturdy table edge or anchored bedsheet/towel, keep body rigid, pull chest up."),
+        ex("ex_home_superman", "Superman Back Extensions", "BACK", "Glutes, Lower Back, Rear Delts", "Bodyweight", "Beginner", "Lie face down, lift chest, arms, and thighs off floor together and squeeze for 2 seconds."),
+        ex("ex_home_prone_ytw", "Prone Y-T-W Floor Raises", "BACK", "Rear Delts, Mid-Traps", "Bodyweight", "Beginner", "Lie face down and lift thumbs skyward through Y, T, and W arm positions with control."),
+        ex("ex_home_doorway_row", "Doorframe Single-Arm Row", "BACK", "Biceps, Lats", "Home / Bodyweight", "Beginner", "Hold a solid doorframe with feet near threshold, lean back straight, and row chest forward."),
+        ex("ex_home_chinups", "Chin-Ups (Underhand Grip)", "BACK", "Biceps, Lats", "Home Pull-Up Bar", "Intermediate", "Grip bar palms facing you shoulder-width apart; pull chest smoothly toward bar."),
+
+        // Home Shoulders
+        ex("ex_home_pike_pushup", "Pike Push-Ups", "SHOULDERS", "Triceps, Upper Chest", "Bodyweight", "Intermediate", "Hinge hips high into an inverted V, lower crown of head toward floor, press back up."),
+        ex("ex_home_shoulder_taps", "Plank Shoulder Taps", "SHOULDERS", "Core, Triceps", "Bodyweight", "Beginner", "Hold high plank with minimal hip sway and alternate tapping each opposite shoulder."),
+        ex("ex_home_wall_handstand", "Wall Handstand Hold (Reps = Secs)", "SHOULDERS", "Triceps, Core, Traps", "Bodyweight", "Advanced", "Kick up against a wall, push tall through shoulders, brace ribs down and hold."),
+        ex("ex_home_pseudo_planche", "Pseudo-Planche Push-Ups", "SHOULDERS", "Chest, Triceps", "Bodyweight", "Advanced", "Turn fingers slightly outward, lean shoulders forward past wrists, press smoothly."),
+
+        // Home Legs & Quads
+        ex("ex_home_air_squat", "Bodyweight Air Squats", "QUADS", "Glutes, Core", "Bodyweight", "Beginner", "Feet shoulder-width apart, sit hips back and down past parallel, drive knees outward."),
+        ex("ex_home_jump_squat", "Explosive Jump Squats", "QUADS", "Glutes, Calves", "Bodyweight", "Intermediate", "Squat controlled then explode upward softly landing straight into the next rep."),
+        ex("ex_home_reverse_lunge", "Alternating Reverse Lunges", "QUADS", "Glutes, Hamstrings", "Bodyweight", "Beginner", "Step one foot back smoothly, lower rear knee just above floor, drive up through front heel."),
+        ex("ex_home_chair_split_squat", "Chair / Couch Split Squat", "QUADS", "Glutes, Hamstrings", "Home / Bodyweight", "Intermediate", "Rest back instep on a chair or sofa, keep torso tall, sink deep into front quad."),
+        ex("ex_home_wall_sit", "Wall Sit Hold (Reps = Secs)", "QUADS", "Glutes, Calves", "Bodyweight", "Beginner", "Press back flat against wall with knees at 90° and hold steady breathing."),
+        ex("ex_home_step_ups", "Chair / Stair Step-Ups", "QUADS", "Glutes, Calves", "Home / Bodyweight", "Beginner", "Drive completely through top foot on a sturdy step or chair without pushing off bottom toes."),
+        ex("ex_home_pistol_squat", "Assisted Pistol Squat", "QUADS", "Glutes, Core, Balance", "Bodyweight", "Advanced", "Balance on one leg holding a doorframe if needed, descend deeply and stand strong."),
+
+        // Home Hamstrings, Glutes & Calves
+        ex("ex_home_glute_bridge", "Floor Glute Bridges", "GLUTES", "Hamstrings, Core", "Bodyweight", "Beginner", "Drive heels into floor, tuck pelvis, squeeze glutes hard for 1 second at the top."),
+        ex("ex_home_single_leg_bridge", "Single-Leg Glute Bridge", "GLUTES", "Hamstrings, Core", "Bodyweight", "Intermediate", "Keep one leg extended while driving hips skyward through the planted heel."),
+        ex("ex_home_towel_leg_curl", "Sliding Towel / Sock Leg Curls", "HAMSTRINGS", "Glutes, Calves", "Home / Bodyweight", "Intermediate", "Bridge hips up on a smooth floor with heels on a towel, slide out and curl back in."),
+        ex("ex_home_bw_rdl", "Single-Leg Bodyweight RDL", "HAMSTRINGS", "Glutes, Balance", "Bodyweight", "Beginner", "Hinge smoothly at hips extending rear leg behind you while keeping back flat."),
+        ex("ex_home_donkey_kicks", "Donkey Kicks", "GLUTES", "Core", "Bodyweight", "Beginner", "On hands and knees, press heel straight toward ceiling without overarching lower back."),
+        ex("ex_home_calf_raise", "Single-Leg Standing Calf Raise", "CALVES", "", "Home / Bodyweight", "Beginner", "Stand on a stair edge or flat floor, pause at peak contraction, lower slowly."),
+
+        // Home Arms (Triceps & Biceps)
+        ex("ex_home_chair_dips", "Chair / Bench Triceps Dips", "TRICEPS", "Front Delts, Chest", "Home / Bodyweight", "Beginner", "Hands on edge of a sturdy chair, lower hips straight down beside chair and lock out."),
+        ex("ex_home_floor_tricep_ext", "Bodyweight Floor Triceps Extensions", "TRICEPS", "Core", "Bodyweight", "Intermediate", "From forearm plank, press evenly through palms to extend elbows into high plank."),
+        ex("ex_home_backpack_curl", "Loaded Backpack / Towel Biceps Curl", "BICEPS", "Forearms", "Home / Bodyweight", "Beginner", "Fill a backpack with books/water bottles and curl smoothly keeping elbows pinned."),
+        ex("ex_home_underhand_row", "Underhand Inverted Table Row", "BICEPS", "Back, Forearms", "Home / Bodyweight", "Intermediate", "Use an underhand grip under a sturdy table or bar to load biceps and lats together."),
+
+        // Home Core & Abs
+        ex("ex_home_side_plank", "Side Plank Hold (Reps = Secs)", "CORE", "Obliques, Shoulders", "Bodyweight", "Beginner", "Stack feet or stagger knees, lift hips into a crisp straight line."),
+        ex("ex_home_bicycle_crunch", "Bicycle Crunches", "CORE", "Obliques", "Bodyweight", "Beginner", "Rotate ribcage smoothly toward opposite knee without pulling on your neck."),
+        ex("ex_home_lying_leg_raise", "Lying Leg Raises", "CORE", "Lower Abs, Hip Flexors", "Bodyweight", "Intermediate", "Press lower back firmly into mat, lower straight legs slowly without arching."),
+        ex("ex_home_mountain_climbers", "Mountain Climbers", "CORE", "Shoulders, Quads", "Bodyweight", "Beginner", "Maintain flat plank posture while driving knees rapidly toward chest."),
+        ex("ex_home_russian_twist", "Russian Twists", "CORE", "Obliques", "Bodyweight", "Beginner", "Lean back ~45° with braced core and tap floor smoothly side to side."),
+        ex("ex_home_dead_bug", "Dead Bug Core Bracing", "CORE", "Deep Transverse Abs", "Bodyweight", "Beginner", "Extend opposite arm and leg slowly while gluing lower back to the floor."),
+        ex("ex_home_hollow_hold", "Hollow Body Hold (Reps = Secs)", "CORE", "Hip Flexors", "Bodyweight", "Intermediate", "Press lower back flat, lift shoulders and straight legs slightly off floor, hold tight."),
+
+        // Home Conditioning & Full Body
+        ex("ex_home_burpees", "Full Bodyweight Burpees", "FULL_BODY", "Chest, Quads, Core", "Bodyweight", "Intermediate", "Drop into plank, perform a crisp push-up, snap feet in, and jump vertically."),
+        ex("ex_home_jumping_jacks", "Jumping Jacks", "FULL_BODY", "Calves, Shoulders", "Bodyweight", "Beginner", "Stay light on balls of feet with full overhead arm reach."),
+        ex("ex_home_high_knees", "High Knees Sprint", "FULL_BODY", "Core, Hip Flexors, Calves", "Bodyweight", "Beginner", "Drive knees to hip height rapidly while pumping arms in rhythm.")
     )
 
     private fun ex(
@@ -400,5 +458,124 @@ object SeedExerciseCatalog {
                 ))
             )
         }
+    }
+
+    /**
+     * Starter Home Workout routines requiring zero gym machines.
+     * Uses `tpl_home_` ID prefix so Home Studio and Gym Floor stay cleanly separated
+     * without breaking existing Room or Firestore schemas.
+     */
+    fun createStarterHomeTemplates(userId: String): List<WorkoutTemplateEntity> {
+        val now = System.currentTimeMillis()
+        fun homeTpl(slug: String, name: String, desc: String, specs: List<TemplateExerciseSpec>) = WorkoutTemplateEntity(
+            id = "tpl_home_${slug}_${UUID.randomUUID().toString().take(4)}",
+            userId = userId,
+            name = name,
+            description = desc,
+            exercisesJson = SeedSerialization.encodeTemplateExercises(specs),
+            createdAtEpochMs = now,
+            updatedAtEpochMs = now
+        )
+
+        return listOf(
+            homeTpl(
+                slug = "fullbody",
+                name = "Home Full Body Foundation",
+                desc = "No-equipment total-body bodyweight routine for home",
+                specs = listOf(
+                    TemplateExerciseSpec("ex_pushups", "Push-Ups", "CHEST", 3, 12, 0.0, 60),
+                    TemplateExerciseSpec("ex_home_air_squat", "Bodyweight Air Squats", "QUADS", 3, 15, 0.0, 60),
+                    TemplateExerciseSpec("ex_home_inverted_row", "Table / Towel Inverted Row", "BACK", 3, 10, 0.0, 75),
+                    TemplateExerciseSpec("ex_home_glute_bridge", "Floor Glute Bridges", "GLUTES", 3, 15, 0.0, 60),
+                    TemplateExerciseSpec("ex_plank", "Forearm Plank (Reps = Secs)", "CORE", 3, 45, 0.0, 45)
+                )
+            ),
+            homeTpl(
+                slug = "upper_push",
+                name = "Home Chest, Shoulders & Triceps",
+                desc = "Upper-body bodyweight push session at home",
+                specs = listOf(
+                    TemplateExerciseSpec("ex_pushups", "Push-Ups", "CHEST", 4, 15, 0.0, 60),
+                    TemplateExerciseSpec("ex_home_decline_pushup", "Decline Push-Ups (Feet Elevated)", "CHEST", 3, 12, 0.0, 75),
+                    TemplateExerciseSpec("ex_home_pike_pushup", "Pike Push-Ups", "SHOULDERS", 3, 10, 0.0, 75),
+                    TemplateExerciseSpec("ex_home_diamond_pushup", "Diamond Push-Ups", "CHEST", 3, 10, 0.0, 60),
+                    TemplateExerciseSpec("ex_home_chair_dips", "Chair / Bench Triceps Dips", "TRICEPS", 3, 12, 0.0, 60)
+                )
+            ),
+            homeTpl(
+                slug = "back_arms",
+                name = "Home Back, Posture & Arms",
+                desc = "Posterior chain, posture & arm strength at home",
+                specs = listOf(
+                    TemplateExerciseSpec("ex_home_inverted_row", "Table / Towel Inverted Row", "BACK", 4, 10, 0.0, 75),
+                    TemplateExerciseSpec("ex_home_superman", "Superman Back Extensions", "BACK", 3, 15, 0.0, 45),
+                    TemplateExerciseSpec("ex_home_prone_ytw", "Prone Y-T-W Floor Raises", "BACK", 3, 12, 0.0, 45),
+                    TemplateExerciseSpec("ex_home_backpack_curl", "Loaded Backpack / Towel Biceps Curl", "BICEPS", 3, 12, 0.0, 60),
+                    TemplateExerciseSpec("ex_home_floor_tricep_ext", "Bodyweight Floor Triceps Extensions", "TRICEPS", 3, 12, 0.0, 60)
+                )
+            ),
+            homeTpl(
+                slug = "lower_glutes",
+                name = "Home Legs & Glutes Sculptor",
+                desc = "Quads, hamstrings, glutes & calves without weights",
+                specs = listOf(
+                    TemplateExerciseSpec("ex_home_air_squat", "Bodyweight Air Squats", "QUADS", 4, 20, 0.0, 60),
+                    TemplateExerciseSpec("ex_home_reverse_lunge", "Alternating Reverse Lunges", "QUADS", 3, 12, 0.0, 60),
+                    TemplateExerciseSpec("ex_home_chair_split_squat", "Chair / Couch Split Squat", "QUADS", 3, 10, 0.0, 75),
+                    TemplateExerciseSpec("ex_home_single_leg_bridge", "Single-Leg Glute Bridge", "GLUTES", 3, 12, 0.0, 60),
+                    TemplateExerciseSpec("ex_home_towel_leg_curl", "Sliding Towel / Sock Leg Curls", "HAMSTRINGS", 3, 12, 0.0, 60),
+                    TemplateExerciseSpec("ex_home_calf_raise", "Single-Leg Standing Calf Raise", "CALVES", 3, 15, 0.0, 45)
+                )
+            ),
+            homeTpl(
+                slug = "core_abs",
+                name = "Home Core & Abs Finisher",
+                desc = "15-minute mat core endurance & stability circuit",
+                specs = listOf(
+                    TemplateExerciseSpec("ex_plank", "Forearm Plank (Reps = Secs)", "CORE", 3, 60, 0.0, 45),
+                    TemplateExerciseSpec("ex_home_lying_leg_raise", "Lying Leg Raises", "CORE", 3, 15, 0.0, 45),
+                    TemplateExerciseSpec("ex_home_bicycle_crunch", "Bicycle Crunches", "CORE", 3, 20, 0.0, 45),
+                    TemplateExerciseSpec("ex_home_mountain_climbers", "Mountain Climbers", "CORE", 3, 30, 0.0, 45),
+                    TemplateExerciseSpec("ex_home_dead_bug", "Dead Bug Core Bracing", "CORE", 3, 12, 0.0, 45)
+                )
+            ),
+            homeTpl(
+                slug = "hiit_burn",
+                name = "Home HIIT Athletic Circuit",
+                desc = "High-output bodyweight conditioning anywhere",
+                specs = listOf(
+                    TemplateExerciseSpec("ex_home_jumping_jacks", "Jumping Jacks", "FULL_BODY", 3, 40, 0.0, 30),
+                    TemplateExerciseSpec("ex_home_burpees", "Full Bodyweight Burpees", "FULL_BODY", 3, 12, 0.0, 60),
+                    TemplateExerciseSpec("ex_home_jump_squat", "Explosive Jump Squats", "QUADS", 3, 15, 0.0, 60),
+                    TemplateExerciseSpec("ex_home_mountain_climbers", "Mountain Climbers", "CORE", 3, 30, 0.0, 45),
+                    TemplateExerciseSpec("ex_home_high_knees", "High Knees Sprint", "FULL_BODY", 3, 30, 0.0, 45)
+                )
+            )
+        )
+    }
+
+    fun isHomeExercise(exercise: ExerciseEntity): Boolean {
+        return exercise.id.startsWith("ex_home_") ||
+            exercise.equipment.contains("Bodyweight", ignoreCase = true) ||
+            exercise.equipment.contains("Home", ignoreCase = true) ||
+            exercise.equipment.contains("Mat", ignoreCase = true) ||
+            exercise.equipment.contains("No Equipment", ignoreCase = true) ||
+            exercise.equipment.contains("Resistance Band", ignoreCase = true)
+    }
+
+    fun isHomeTemplate(template: WorkoutTemplateEntity): Boolean {
+        return template.id.startsWith("tpl_home_") ||
+            template.name.contains("Home", ignoreCase = true) ||
+            template.description.contains("at home", ignoreCase = true) ||
+            template.description.contains("no-equipment", ignoreCase = true)
+    }
+
+    fun isHomeSession(
+        templateId: String?,
+        templateName: String,
+        homeTemplateIds: Set<String>
+    ): Boolean {
+        return (templateId != null && (templateId.startsWith("tpl_home_") || templateId in homeTemplateIds)) ||
+            templateName.contains("Home", ignoreCase = true)
     }
 }

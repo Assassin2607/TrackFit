@@ -250,4 +250,165 @@ class FitnessCalculationsTest {
         assertTrue(FitnessCalculations.formatWater(1000, UnitSystem.IMPERIAL).endsWith("fl oz"))
         assertTrue(FitnessCalculations.formatWaterCompact(1000, UnitSystem.IMPERIAL).endsWith("oz"))
     }
+
+    @Test
+    fun calorieEstimatedWeight_tracksDailyDeficitFromDay1Anchor() {
+        val keys = listOf(
+            "2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04",
+            "2026-11-05", "2026-11-06", "2026-11-07"
+        )
+        // Day 1 scale weight = 75.0 kg. Male, 175 cm, 26y, Moderate (~2660 kcal TDEE).
+        // Eating 2000 kcal + 100 kcal workout ≈ -760 kcal/day deficit (~-0.098 kg/day).
+        val scaleLogs = listOf(
+            WeightPoint(dateKey = "2026-11-01", weightKg = 75.0, epochMs = 1_700_000_000_000L)
+        )
+        val dailyInputs = keys.associateWith { dk ->
+            com.example.domain.calc.DailyNutritionActivityInput(
+                dateKey = dk,
+                foodCalories = 2000,
+                workoutBurnKcal = 100,
+                cardioBurnKcal = 0
+            )
+        }
+
+        val summary = AnalyticsEngines.calculateCalorieEstimatedWeight(
+            weightLogs = scaleLogs,
+            fallbackWeightKg = 75.0,
+            heightCm = 175.0,
+            age = 26,
+            gender = Gender.MALE,
+            activityLevel = ActivityLevel.MODERATE,
+            dailyLogsByDateKey = dailyInputs,
+            todayDateKey = "2026-11-07",
+            orderedDateKeys = keys
+        )
+
+        assertEquals(75.0, summary.anchorWeightKg, 0.001)
+        assertEquals(7, summary.dailySeries.size)
+        assertEquals(7, summary.loggedNutritionDays)
+        assertEquals(com.example.domain.calc.EstimatedWeightDirection.LOSING, summary.direction)
+        assertTrue("Expected estimated weight below 75.0 kg, got ${summary.estimatedCurrentWeightKg}", summary.estimatedCurrentWeightKg < 74.6)
+        assertTrue("Expected realistic 1-week drop near ~74.2-74.5 kg, got ${summary.estimatedCurrentWeightKg}", summary.estimatedCurrentWeightKg > 73.8)
+        assertTrue(summary.deltaSinceAnchorKg < -0.4)
+        assertTrue(summary.weeklyProjectedRateKg < -0.4)
+    }
+
+    @Test
+    fun calorieEstimatedWeight_tracksSurplusAndUnloggedDaysHoldSteady() {
+        val keys = listOf(
+            "2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04",
+            "2026-11-05", "2026-11-06", "2026-11-07"
+        )
+        val scaleLogs = listOf(
+            WeightPoint(dateKey = "2026-11-01", weightKg = 70.0, epochMs = 1_700_000_000_000L)
+        )
+        // Log surplus on 4 days, leave 3 days unlogged (should hold steady with deltaKg == 0.0)
+        val dailyInputs = mapOf(
+            "2026-11-01" to com.example.domain.calc.DailyNutritionActivityInput("2026-11-01", 3100, 0, 0),
+            "2026-11-02" to com.example.domain.calc.DailyNutritionActivityInput("2026-11-02", 3100, 0, 0),
+            "2026-11-04" to com.example.domain.calc.DailyNutritionActivityInput("2026-11-04", 3100, 0, 0),
+            "2026-11-06" to com.example.domain.calc.DailyNutritionActivityInput("2026-11-06", 3100, 0, 0)
+        )
+
+        val summary = AnalyticsEngines.calculateCalorieEstimatedWeight(
+            weightLogs = scaleLogs,
+            fallbackWeightKg = 70.0,
+            heightCm = 175.0,
+            age = 26,
+            gender = Gender.MALE,
+            activityLevel = ActivityLevel.MODERATE,
+            dailyLogsByDateKey = dailyInputs,
+            todayDateKey = "2026-11-07",
+            orderedDateKeys = keys
+        )
+
+        assertEquals(com.example.domain.calc.EstimatedWeightDirection.GAINING, summary.direction)
+        assertEquals(4, summary.loggedNutritionDays)
+        assertTrue(summary.estimatedCurrentWeightKg > 70.15)
+        // Day 3 (index 2) has no food logged -> deltaKg must be 0.0 and holds Day 2 weight
+        val day3 = summary.dailySeries[2]
+        assertFalse(day3.hasNutritionData)
+        assertEquals(0.0, day3.deltaKg, 0.0001)
+        assertEquals(summary.dailySeries[1].estimatedWeightKg, day3.estimatedWeightKg, 0.0001)
+    }
+
+    @Test
+    fun calorieEstimatedWeight_reAnchorsOnMidWeekScaleCheckIn() {
+        val keys = listOf("2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04")
+        val scaleLogs = listOf(
+            WeightPoint(dateKey = "2026-11-01", weightKg = 75.0, epochMs = 1_700_000_000_000L),
+            WeightPoint(dateKey = "2026-11-03", weightKg = 74.2, epochMs = 1_700_172_800_000L)
+        )
+        val summary = AnalyticsEngines.calculateCalorieEstimatedWeight(
+            weightLogs = scaleLogs,
+            fallbackWeightKg = 75.0,
+            heightCm = 175.0,
+            age = 26,
+            gender = Gender.MALE,
+            activityLevel = ActivityLevel.MODERATE,
+            dailyLogsByDateKey = emptyMap(),
+            todayDateKey = "2026-11-04",
+            orderedDateKeys = keys
+        )
+        assertEquals(74.2, summary.anchorWeightKg, 0.001)
+        assertEquals(74.2, summary.estimatedCurrentWeightKg, 0.001)
+        assertEquals(com.example.domain.calc.EstimatedWeightDirection.NEED_DATA, summary.direction)
+    }
+
+    @Test
+    fun personalRecordDetector_supportsBodyweightRepPrs() {
+        val firstEver = AnalyticsEngines.detectPersonalRecord(
+            exerciseId = "ex_pushups",
+            weightKg = 0.0,
+            reps = 15,
+            isWarmup = false,
+            historicalSets = emptyList()
+        )
+        assertFalse(firstEver.isNewPr)
+
+        val history = listOf(
+            HistoricalSetRecord("ex_pushups", 0.0, 15, warmup = false),
+            HistoricalSetRecord("ex_pushups", 0.0, 12, warmup = false)
+        )
+        val sameReps = AnalyticsEngines.detectPersonalRecord("ex_pushups", 0.0, 15, false, history)
+        assertFalse(sameReps.isNewPr)
+
+        val newRepPr = AnalyticsEngines.detectPersonalRecord("ex_pushups", 0.0, 20, false, history)
+        assertTrue(newRepPr.isNewPr)
+        assertTrue(PrCategory.MOST_REPS_AT_WEIGHT in newRepPr.categories)
+    }
+
+    @Test
+    fun homeWorkoutCatalog_providesComprehensiveHomeExercisesAndCleanClassification() {
+        val allBuiltIn = com.example.data.seed.SeedExerciseCatalog.getBuiltInExercises()
+        val homeExercises = allBuiltIn.filter { com.example.data.seed.SeedExerciseCatalog.isHomeExercise(it) }
+        assertTrue("Expected at least 35 built-in home exercises, got ${homeExercises.size}", homeExercises.size >= 35)
+        val homeMuscles = homeExercises.map { it.muscleGroup }.toSet()
+        assertTrue("CHEST" in homeMuscles)
+        assertTrue("BACK" in homeMuscles)
+        assertTrue("SHOULDERS" in homeMuscles)
+        assertTrue("QUADS" in homeMuscles)
+        assertTrue("GLUTES" in homeMuscles)
+        assertTrue("CORE" in homeMuscles)
+        assertTrue("FULL_BODY" in homeMuscles)
+
+        val homeTpl = com.example.data.local.WorkoutTemplateEntity(
+            id = "tpl_home_fullbody_1234",
+            userId = "u1",
+            name = "Home Full Body Foundation",
+            description = "No-equipment routine",
+            exercisesJson = "[]"
+        )
+        val gymTpl = com.example.data.local.WorkoutTemplateEntity(
+            id = "tpl_ppl_push_1234",
+            userId = "u1",
+            name = "Push Day (Chest / Shoulders / Triceps)",
+            description = "Barbell & dumbbell hypertrophy",
+            exercisesJson = "[]"
+        )
+        assertTrue(com.example.data.seed.SeedExerciseCatalog.isHomeTemplate(homeTpl))
+        assertFalse(com.example.data.seed.SeedExerciseCatalog.isHomeTemplate(gymTpl))
+        assertTrue(com.example.data.seed.SeedExerciseCatalog.isHomeSession(homeTpl.id, homeTpl.name, setOf(homeTpl.id)))
+        assertFalse(com.example.data.seed.SeedExerciseCatalog.isHomeSession(gymTpl.id, gymTpl.name, setOf(homeTpl.id)))
+    }
 }

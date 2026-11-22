@@ -45,28 +45,31 @@ This document is the complete, exact inventory of every module, file, design tok
 | `ui/theme/Theme.kt` | `FitTrackTheme` dark-first M3 `ColorScheme` + `FitTrackThemeExt` custom semantic tokens (`mutedText`, `success`, `warning`, `cardioAccent`, `volumeAccent`). |
 | `domain/model/FitTrackEnums.kt` | Type-safe enums: `GoalType`, `Gender`, `ActivityLevel`, `WorkoutSplit`, `MuscleGroup`, `CardioActivityType` (with base MET values), `MealType`, `PhotoType`, `UnitSystem`, `SyncState`. |
 | `domain/calc/FitnessCalculations.kt` | Deterministic calculators: Mifflin-St Jeor BMR, TDEE, initial macro/calorie targets with safety floors, manual macro split, MET cardio calories, strength workout calories, energy balance & 7,700 kcal/kg weight change, Epley 1RM, set volume, goal progress %, unit conversions, date keys. |
-| `domain/calc/AnalyticsEngines.kt` | Deterministic analytics: 100-pt Daily Score breakdown, rolling 7/14/30-day weight trends & weekly rates, PR detection (Max Weight, Est. 1RM, Set Volume), compassionate non-punitive nutrition coaching, weekly adaptive target recommendations, achievements engine. |
-| `data/local/FitTrackEntities.kt` | All 14 Room `@Entity` definitions and database indices. |
-| `data/local/FitTrackDaos.kt` | Room DAOs (`UserProfileDao`, `UserGoalDao`, `ExerciseDao`, `WorkoutTemplateDao`, `WorkoutSessionDao`, `CardioSessionDao`, `NutritionDao`, `BodyMetricsDao`, `SyncQueueDao`). |
-| `data/local/FitTrackDatabase.kt` | Singleton Room database (`fittrack_db`, version `1`). |
-| `data/seed/SeedCatalogs.kt` | `FoodCatalogProvider` swappable boundary, JSON serializers (`SeedSerialization`), pre-seeded exercise library, starter split templates, and curated staple food catalog. |
+| `domain/calc/AnalyticsEngines.kt` | Deterministic analytics: 100-pt Daily Score breakdown, rolling 7/14/30-day weight trends, **Calorie-Deficit Daily Estimated Weight** (`calculateCalorieEstimatedWeight`), PR detection (Max Weight, Est. 1RM, Set Volume, Bodyweight Rep PRs), compassionate nutrition coaching, weekly adaptive targets, achievements engine. |
+| `data/local/FitTrackEntities.kt` | All 15 Room `@Entity` definitions and database indices (including `water_logs`). |
+| `data/local/FitTrackDaos.kt` | Room DAOs (`UserProfileDao`, `UserGoalDao`, `ExerciseDao`, `WorkoutTemplateDao`, `WorkoutSessionDao`, `CardioSessionDao`, `NutritionDao`, `WaterDao`, `BodyMetricsDao`, `SyncQueueDao`). |
+| `data/local/FitTrackDatabase.kt` | Singleton Room database (`fittrack_db`, version `2` with non-destructive `MIGRATION_1_2`). |
+| `data/seed/SeedCatalogs.kt` | `FoodCatalogProvider` swappable boundary, JSON serializers (`SeedSerialization`), pre-seeded Gym + 38+ Home/Bodyweight exercise library, starter Gym & 6 starter Home templates (`tpl_home_*`), Home/Gym classification helpers, and curated staple food catalog. |
 | `data/prefs/PreferencesManager.kt` | Jetpack DataStore (`fittrack_prefs`) persisting `unitSystem`, reminder toggles, and `githubRepo`. |
+| `notifications/FitTrackNotificationManager.kt` | Notification channels (`fittrack_reminders`, `fittrack_pr_alerts`), Android 13+ permission checks, Play-compliant `AlarmManager.setInexactRepeating` daily/weekly reminder scheduling, instant PR alert notifications, and test notification trigger. |
+| `notifications/FitTrackReminderReceiver.kt` | Non-exported `BroadcastReceiver` delivering scheduled reminder notifications and restoring enabled reminders on `ACTION_BOOT_COMPLETED`. |
 | `data/remote/FirestoreErrorHandler.kt` | Structured Firestore error classification & logging (`OperationType`). |
 | `data/remote/FirestoreSyncManager.kt` | Authenticated Firestore push (`flushQueue`), immutable-`createdAt` safe upserts (`upsertPreservingCreatedAt`), cloud-to-local restore (`pullCloudDataIntoLocal`), and full account deletion (`deleteAllRemoteUserData`). |
 | `data/remote/GitHubUpdateChecker.kt` | Zero-permission GitHub Releases API checker (`normalizeRepoInput`, `isNewerVersion`, `checkLatestRelease`, `AppUpdateInfo`, `AppUpdateStatus`). |
-| `data/repository/FitTrackRepository.kt` | Offline-first repository orchestrating Room transactions, seed hydration, private progress photo copying, sync queue enqueue/flush, and JSON export. |
-| `viewmodel/FitTrackViewModel.kt` | Reactive state aggregator computing all derived metrics, active workout state, rest timer coroutine, sync triggers, and GitHub update checks. |
+| `data/repository/FitTrackRepository.kt` | Offline-first repository orchestrating Room transactions, Gym & Home seed hydration, template sync from workout history, private progress photo copying, sync queue enqueue/flush, and JSON export. |
+| `viewmodel/FitTrackViewModel.kt` | Reactive state aggregator computing all derived metrics (including daily estimated weight), active workout state, rest timer coroutine, reminder alarm syncing, PR notifications, cloud sync triggers, and GitHub update checks. |
 | `ui/auth/GoogleAuthHelper.kt` | Jetpack `CredentialManager` Google Sign-In (`GetGoogleIdOption` / `GetSignInWithGoogleOption`), Firebase credential exchange, and sign-out cleanup. |
 | `ui/auth/AuthScreen.kt` | Branded FitTrack welcome & Google Sign-In gate. |
-| `ui/components/FitTrackComponents.kt` | Reusable M3 components (`FitTrackCard`, `DailyScoreRing`, `MacroProgressBar`, `SectionHeader`, `SyncStatusBadge`, `EstimationDisclaimerBanner`). |
+| `ui/components/FitTrackComponents.kt` | Reusable 3D M3 components (`FitTrackCard`, `DailyScoreRing`, `MacroProgressBar`, `SectionHeader`, `SyncStatusBadge`, `EstimationDisclaimerBanner`). |
 | `ui/onboarding/OnboardingScreen.kt` | 3-step onboarding flow with live deterministic BMR/TDEE/macro preview. |
-| `ui/dashboard/DashboardScreen.kt` | Home tab: Daily Score hero & breakdown dialog, GitHub Release update banner, calories/macros, energy balance, coaching insight, adaptive recommendation, quick actions. |
-| `ui/workout/WorkoutScreen.kt` | Workout tab: Templates, template builder/editor, exercise library + custom exercise creator, recent strength & cardio logs. |
-| `ui/workout/ActiveWorkoutScreen.kt` | Full-screen active workout logger with elapsed timer, previous-set hints, set/RIR/warmup editing, quick progression buttons, inline rest timer, live PR badges. |
+| `ui/dashboard/GameScoreHeroCard.kt` | Game-HUD Today's Score hero card: Rank Shield Crest (`S+`→`D`), 20-segment radial power gauge, XP tier progress bar, Streak Flame pill, and 5-pillar RPG quest stat slots. |
+| `ui/dashboard/DashboardScreen.kt` | Home tab: `GameScoreHeroCard` & rank breakdown modal, Weight & Trend card with Calorie-Deficit Daily Estimated Weight + `WeightEstimateBreakdownDialog`, Nutrition Today with 3D Hydration Ring & quick Water Log, Energy Balance, coaching insight, GitHub Release update banner. |
+| `ui/workout/WorkoutScreen.kt` | Training Studio tab: Two-button **Gym Training** / **Home Training** mode switcher, mode-scoped KPI card (`7-Day Volume` / `7-Day Home Reps`) with clickable daily workout breakdown dialog, Cream-titled templates, Cardio logger, Gym/Home exercise library, and workout history. |
+| `ui/workout/ActiveWorkoutScreen.kt` | Full-screen active workout logger with Rest Timer pinned at top, Finish Workout docked at bottom, bodyweight (`BW`) input support, previous-set hints, set/RIR/warmup editing, quick progression buttons, and live PR badges. |
 | `ui/workout/CardioLogSheet.kt` | MET-calibrated cardio logging dialog with real-time calorie estimate preview. |
-| `ui/nutrition/NutritionScreen.kt` | Nutrition tab: Daily macro summary, meal-grouped logs, staple/custom food picker, favorites, custom food creator, Saved Meals builder & multiplier logger. |
-| `ui/progress/ProgressScreen.kt` | Progress tab: Weight logger & Canvas trend chart, rolling trend stats, body measurements, Android Photo Picker progress gallery & side-by-side comparison, PR leaderboard, achievements. |
-| `ui/profile/ProfileScreen.kt` | Profile tab: Athlete summary, Edit Goals dialog, Metric/Imperial toggle, Transparent Formulas dialog, reminder toggles, Sync Now, JSON export, GitHub App Updates card, Clear/Delete data controls, Sign Out. |
+| `ui/nutrition/NutritionScreen.kt` | Nutrition tab: Light botanical palette, high-contrast black Weekly toggle, 3D Water Log card, daily macro summary, meal-grouped logs, staple/custom food picker, favorites, custom food creator, Saved Meals builder & multiplier logger. |
+| `ui/progress/ProgressScreen.kt` | Progress tab: Weight logger, interactive Canvas Bezier trend chart + `Est. Today` calorie-estimated weight KPI, 3D 7-day Calorie/Protein/Hydration charts, body measurements, Android Photo Picker progress gallery & comparison, PR leaderboard, achievements. |
+| `ui/profile/ProfileScreen.kt` | Profile tab: Athlete summary, Edit Goals dialog, Metric/Imperial toggle, Transparent Formulas dialog, live Reminder Preferences with Android 13+ `POST_NOTIFICATIONS` permission launcher + Test Notification trigger, App Updates above Cloud Sync & Privacy, JSON export, Clear/Delete data controls, Sign Out. |
 
 ### Automated Test Files
 | Path | Coverage |
@@ -122,20 +125,22 @@ FitTrack uses **zero AI models** — every calculation is deterministic and audi
    - **Fat**: $\max(0.7 \times \text{refWeight}, 27\% \text{ of kcal} \div 9)$, minimum `35 g`.
    - **Carbs**: Remaining calorie budget $\div 4$.
    - **Fiber**: `14 g` per `1000 kcal`, clamped `[22, 50] g`.
-4. **Daily Energy Balance & Energy-Equivalent Weight Change**:
-   - $\text{TotalExpenditure} = \text{TDEE} + \text{WorkoutBurn} + \text{CardioBurn}$
+4. **Daily Energy Balance & Calorie-Deficit Daily Estimated Weight**:
+   - $\text{TotalExpenditure} = \text{TDEE}(\text{currentEstimatedWeight}) + \text{WorkoutBurn} + \text{CardioBurn}$
    - $\text{NetBalance} = \text{FoodIntake} - \text{TotalExpenditure}$
-   - $\text{EstWeightChange}_{\text{kg}} = \text{NetBalance} \div 7700.0$
-5. **100-Point Daily Adherence Score**:
+   - $\text{DailyDelta}_{\text{kg}} = \text{clamp}(\text{NetBalance} \div 7700.0,\ -0.18,\ +0.18)$
+   - Anchors on the user's real scale weigh-in(s) and walks forward day-by-day across logged nutrition days; days without logged meals hold steady (`delta = 0`) so missed logs never fabricate fake weight loss.
+5. **100-Point Daily Adherence Score & Game Rank Tiers**:
    - Nutrition Calorie Adherence: `25 pts`
    - Protein Target: `20 pts`
    - Strength Workout / Weekly Cadence: `25 pts`
    - Cardio Target: `15 pts`
    - Logging Consistency & Streak: `15 pts`
+   - Rank Tiers (`GameScoreHeroCard.kt`): `S+` (`95–100` Legendary), `S` (`85–94` Elite), `A` (`70–84` Veteran), `B` (`55–69` Contender), `C` (`35–54` Challenger), `D` (`0–34` Warm-Up).
 6. **Strength Training & PR Math**:
    - **Set Volume**: $\text{weight}_{\text{kg}} \times \text{reps}$ (excludes warmup sets).
    - **Estimated 1RM (Epley)**: $\text{weight}_{\text{kg}} \times (1 + \text{reps} \div 30.0)$ (equals weight when `reps == 1`).
-   - **PR Categories**: Automatically flags new all-time Max Weight, Estimated 1RM, and Single-Set Volume on working sets.
+   - **PR Categories**: Automatically flags new all-time Max Weight, Estimated 1RM, Single-Set Volume on weighted sets, and Max Reps (`MOST_REPS_AT_WEIGHT`) on bodyweight (`0 kg`) sets.
 7. **MET-Based Cardio Expenditure**:
    - $\text{kcal} = \text{AdjustedMET} \times \text{weight}_{\text{kg}} \times (\text{duration}_{\text{min}} \div 60.0)$
    - Supports Walking (with speed + incline `+0.42 MET/%`), Running (`speedKmh * 0.98`), Cycling, Elliptical, Rowing, Stairmaster, Swimming, Jump Rope, HIIT, and Sports.
@@ -206,6 +211,8 @@ FitTrack uses **zero AI models** — every calculation is deterministic and audi
 | :--- | :--- |
 | `android.permission.INTERNET` | Firebase Auth, Cloud Firestore sync, GitHub Releases update check. |
 | `android.permission.ACCESS_NETWORK_STATE` | Connectivity awareness for Firebase SDK. |
+| `android.permission.POST_NOTIFICATIONS` | Runtime permission (Android 13+) for daily/weekly fitness reminders & instant PR celebration alerts. |
+| `android.permission.RECEIVE_BOOT_COMPLETED` | Restores enabled inexact reminders via `FitTrackReminderReceiver` after device reboot (no exact-alarm permissions). |
 | `ActivityResultContracts.PickVisualMedia` | Zero-permission Android Photo Picker for progress photos (no `READ_MEDIA_IMAGES` or `READ_EXTERNAL_STORAGE`). |
 | `Intent.ACTION_VIEW` | Opens GitHub Release `.apk` download link in the system browser (no `REQUEST_INSTALL_PACKAGES`, no dynamic code loading). |
 

@@ -1,7 +1,12 @@
 package com.example.ui.profile
 
+import android.Manifest
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -24,6 +30,8 @@ import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material3.AlertDialog
@@ -36,10 +44,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +62,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.BuildConfig
 import com.example.data.local.UserProfileEntity
 import com.example.data.remote.AppUpdateStatus
@@ -60,6 +73,7 @@ import com.example.domain.model.ActivityLevel
 import com.example.domain.model.Gender
 import com.example.domain.model.GoalType
 import com.example.domain.model.UnitSystem
+import com.example.notifications.FitTrackNotificationManager
 import com.example.ui.components.EstimationDisclaimerBanner
 import com.example.ui.components.FitTrackCard
 import com.example.ui.components.SyncStatusBadge
@@ -77,6 +91,8 @@ fun ProfileScreen(
     onUpdateProfile: (UserProfileEntity, Boolean) -> Unit,
     onUnitSystemChange: (UnitSystem) -> Unit,
     onUpdateReminders: (Boolean?, Boolean?, Boolean?, Boolean?, Boolean?) -> Unit,
+    onSyncReminders: () -> Unit = {},
+    onSendTestNotification: () -> Unit = {},
     onManualSync: () -> Unit,
     onExportData: ((String) -> Unit) -> Unit,
     onClearWorkouts: () -> Unit,
@@ -85,6 +101,7 @@ fun ProfileScreen(
     onSignOut: () -> Unit
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val profile = state.profile
     val unit = state.preferences.unitSystem
 
@@ -92,6 +109,57 @@ fun ProfileScreen(
     var showFormulasDialog by remember { mutableStateOf(false) }
     var showDeleteAccountDialog by remember { mutableStateOf(false) }
     var githubRepoInput by remember { mutableStateOf(state.preferences.githubRepo) }
+
+    var hasNotificationPermission by remember {
+        mutableStateOf(FitTrackNotificationManager.hasNotificationPermission(context))
+    }
+    var permissionDeniedOnce by remember { mutableStateOf(false) }
+    var pendingNotificationAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val actualGranted = granted && FitTrackNotificationManager.hasNotificationPermission(context)
+        hasNotificationPermission = actualGranted
+        if (actualGranted) {
+            permissionDeniedOnce = false
+            pendingNotificationAction?.invoke()
+            onSyncReminders()
+        } else {
+            permissionDeniedOnce = true
+        }
+        pendingNotificationAction = null
+    }
+
+    // Re-check notification permission when returning from Android System Settings
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val allowed = FitTrackNotificationManager.hasNotificationPermission(context)
+                hasNotificationPermission = allowed
+                if (allowed) {
+                    permissionDeniedOnce = false
+                    onSyncReminders()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    fun requestNotificationPermissionOrRun(actionIfGranted: () -> Unit) {
+        if (FitTrackNotificationManager.hasNotificationPermission(context)) {
+            hasNotificationPermission = true
+            actionIfGranted()
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !permissionDeniedOnce) {
+            pendingNotificationAction = actionIfGranted
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            FitTrackNotificationManager.openAppNotificationSettings(context)
+        }
+    }
 
     LaunchedEffect(state.preferences.githubRepo) {
         if (state.preferences.githubRepo.isNotBlank() && githubRepoInput.isBlank()) {
@@ -188,30 +256,147 @@ fun ProfileScreen(
             }
         }
 
-        // Notification Preferences
+        // Notification Preferences (with live Android 13+ permission check & real local scheduling)
         item {
             val prefs = state.preferences
-            FitTrackCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            FitTrackCard(modifier = Modifier.testTag("reminder_preferences_card")) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (hasNotificationPermission) Icons.Rounded.NotificationsActive else Icons.Rounded.NotificationsOff,
+                            contentDescription = null,
+                            tint = if (hasNotificationPermission) FitTrackThemeExt.colors.success else FitTrackThemeExt.colors.warning
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Reminder Preferences", style = MaterialTheme.typography.titleMedium)
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = if (hasNotificationPermission) {
+                            FitTrackThemeExt.colors.success.copy(alpha = 0.18f)
+                        } else {
+                            FitTrackThemeExt.colors.warning.copy(alpha = 0.18f)
+                        },
+                        border = BorderStroke(
+                            1.dp,
+                            if (hasNotificationPermission) FitTrackThemeExt.colors.success.copy(alpha = 0.6f)
+                            else FitTrackThemeExt.colors.warning.copy(alpha = 0.6f)
+                        )
+                    ) {
+                        Text(
+                            text = if (hasNotificationPermission) "Active" else "Permission Needed",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (hasNotificationPermission) FitTrackThemeExt.colors.success else FitTrackThemeExt.colors.warning,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+
+                if (!hasNotificationPermission) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = FitTrackThemeExt.colors.warning.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, FitTrackThemeExt.colors.warning.copy(alpha = 0.45f))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "Notifications are currently blocked by Android. Allow permission so your workout, meal, weigh-in, and PR alerts arrive on time.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = { requestNotificationPermissionOrRun { onSyncReminders() } },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("allow_notifications_button")
+                                ) {
+                                    Text(if (permissionDeniedOnce || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) "Open Settings" else "Allow Notifications")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                PreferenceToggleRow(
+                    label = "Workout Reminders",
+                    subtitle = "Daily at 6:00 PM",
+                    checked = prefs.workoutReminderEnabled
+                ) { enabled ->
+                    if (enabled && !hasNotificationPermission) {
+                        requestNotificationPermissionOrRun { onUpdateReminders(true, null, null, null, null) }
+                    } else {
+                        onUpdateReminders(enabled, null, null, null, null)
+                    }
+                }
+                PreferenceToggleRow(
+                    label = "Meal Logging Reminders",
+                    subtitle = "Daily at 1:00 PM",
+                    checked = prefs.mealReminderEnabled
+                ) { enabled ->
+                    if (enabled && !hasNotificationPermission) {
+                        requestNotificationPermissionOrRun { onUpdateReminders(null, true, null, null, null) }
+                    } else {
+                        onUpdateReminders(null, enabled, null, null, null)
+                    }
+                }
+                PreferenceToggleRow(
+                    label = "Morning Weigh-In Reminder",
+                    subtitle = "Daily at 7:30 AM",
+                    checked = prefs.weightReminderEnabled
+                ) { enabled ->
+                    if (enabled && !hasNotificationPermission) {
+                        requestNotificationPermissionOrRun { onUpdateReminders(null, null, true, null, null) }
+                    } else {
+                        onUpdateReminders(null, null, enabled, null, null)
+                    }
+                }
+                PreferenceToggleRow(
+                    label = "Weekly Progress Summary",
+                    subtitle = "Sundays at 6:00 PM",
+                    checked = prefs.weeklyReportEnabled
+                ) { enabled ->
+                    if (enabled && !hasNotificationPermission) {
+                        requestNotificationPermissionOrRun { onUpdateReminders(null, null, null, true, null) }
+                    } else {
+                        onUpdateReminders(null, null, null, enabled, null)
+                    }
+                }
+                PreferenceToggleRow(
+                    label = "Personal Record Alerts",
+                    subtitle = "Instant alert when you beat a PR",
+                    checked = prefs.prAlertsEnabled
+                ) { enabled ->
+                    if (enabled && !hasNotificationPermission) {
+                        requestNotificationPermissionOrRun { onUpdateReminders(null, null, null, null, true) }
+                    } else {
+                        onUpdateReminders(null, null, null, null, enabled)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = {
+                        requestNotificationPermissionOrRun {
+                            onSyncReminders()
+                            onSendTestNotification()
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("test_notification_button")
+                ) {
+                    Icon(Icons.Rounded.Notifications, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Reminder Preferences", style = MaterialTheme.typography.titleMedium)
-                }
-                Spacer(modifier = Modifier.height(6.dp))
-                PreferenceToggleRow("Workout Reminders", prefs.workoutReminderEnabled) {
-                    onUpdateReminders(it, null, null, null, null)
-                }
-                PreferenceToggleRow("Meal Logging Reminders", prefs.mealReminderEnabled) {
-                    onUpdateReminders(null, it, null, null, null)
-                }
-                PreferenceToggleRow("Morning Weigh-In Reminder", prefs.weightReminderEnabled) {
-                    onUpdateReminders(null, null, it, null, null)
-                }
-                PreferenceToggleRow("Weekly Progress Summary", prefs.weeklyReportEnabled) {
-                    onUpdateReminders(null, null, null, it, null)
-                }
-                PreferenceToggleRow("Personal Record Alerts", prefs.prAlertsEnabled) {
-                    onUpdateReminders(null, null, null, null, it)
+                    Text("Send Test Notification")
                 }
             }
         }
@@ -533,7 +718,12 @@ private fun ProfileInfoRow(label: String, value: String) {
 }
 
 @Composable
-private fun PreferenceToggleRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun PreferenceToggleRow(
+    label: String,
+    subtitle: String = "",
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -541,7 +731,17 @@ private fun PreferenceToggleRow(label: String, checked: Boolean, onCheckedChange
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            if (subtitle.isNotBlank()) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = FitTrackThemeExt.colors.mutedText
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(8.dp))
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }

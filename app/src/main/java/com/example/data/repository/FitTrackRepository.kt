@@ -95,8 +95,11 @@ class FitTrackRepository(
 
     suspend fun initializeUserSession(userId: String) {
         withContext(Dispatchers.IO) {
-            if (localDb.exerciseDao().countGlobal() == 0) {
-                localDb.exerciseDao().upsertAll(SeedExerciseCatalog.getBuiltInExercises())
+            // Seed any missing built-in exercises (preserves user favorites on already-seeded items)
+            val existingExerciseIds = localDb.exerciseDao().observeExercises(userId).first().map { it.id }.toSet()
+            val missingBuiltIns = SeedExerciseCatalog.getBuiltInExercises().filter { it.id !in existingExerciseIds }
+            if (missingBuiltIns.isNotEmpty()) {
+                localDb.exerciseDao().upsertAll(missingBuiltIns)
             }
             if (localDb.nutritionDao().countGlobalFoods() == 0) {
                 localDb.nutritionDao().upsertFoods(foodCatalogProvider.getStarterFoods())
@@ -104,6 +107,27 @@ class FitTrackRepository(
         }
         // Pull any existing cloud data for this authenticated user, then flush pending local writes
         syncManager.pullCloudDataIntoLocal(userId)
+
+        // Ensure existing users who already completed onboarding receive starter Home Workouts if none exist
+        val profile = localDb.userProfileDao().getProfile(userId)
+        if (profile?.onboardingCompleted == true) {
+            val currentTemplates = localDb.workoutTemplateDao().observeTemplates(userId).first()
+            if (currentTemplates.none { SeedExerciseCatalog.isHomeTemplate(it) }) {
+                val homeTemplates = SeedExerciseCatalog.createStarterHomeTemplates(userId)
+                localDb.workoutTemplateDao().upsertAll(homeTemplates)
+                homeTemplates.forEach { tpl ->
+                    localDb.syncQueueDao().enqueue(
+                        SyncQueueEntity(
+                            "${userId}:${FirestoreSyncManager.COLLECTION_TEMPLATES}:${tpl.id}",
+                            userId,
+                            FirestoreSyncManager.COLLECTION_TEMPLATES,
+                            tpl.id,
+                            FirestoreSyncManager.ACTION_UPSERT
+                        )
+                    )
+                }
+            }
+        }
         syncManager.flushQueue(userId)
     }
 
@@ -165,10 +189,12 @@ class FitTrackRepository(
             )
         )
 
-        // Seed workout templates for preferred split if user has none yet
+        // Seed gym + home workout templates for preferred split if user has none yet
         val split = WorkoutSplit.fromNameSafe(profile.preferredSplit)
         val seededTemplates = if (localDb.workoutTemplateDao().countForUser(profile.userId) == 0) {
-            SeedExerciseCatalog.createStarterTemplates(profile.userId, split).also {
+            val combined = SeedExerciseCatalog.createStarterTemplates(profile.userId, split) +
+                SeedExerciseCatalog.createStarterHomeTemplates(profile.userId)
+            combined.also {
                 localDb.workoutTemplateDao().upsertAll(it)
             }
         } else {
@@ -264,10 +290,12 @@ class FitTrackRepository(
         templateId: String?,
         name: String,
         description: String,
-        exercises: List<TemplateExerciseSpec>
+        exercises: List<TemplateExerciseSpec>,
+        isHomeWorkout: Boolean = false
     ) {
         val now = System.currentTimeMillis()
-        val id = templateId ?: "tpl_${UUID.randomUUID().toString().take(8)}"
+        val idPrefix = if (isHomeWorkout) "tpl_home_" else "tpl_"
+        val id = templateId ?: "${idPrefix}${UUID.randomUUID().toString().take(8)}"
         val existing = templateId?.let { localDb.workoutTemplateDao().getById(userId, it) }
         val entity = WorkoutTemplateEntity(
             id = id,
@@ -344,6 +372,11 @@ class FitTrackRepository(
                     }
                 }
             }
+            SeedExerciseCatalog.createStarterHomeTemplates(userId).forEach { tpl ->
+                SeedSerialization.decodeTemplateExercises(tpl.exercisesJson).forEach { spec ->
+                    putIfAbsent(spec.exerciseId, spec)
+                }
+            }
         }
 
         val now = System.currentTimeMillis()
@@ -351,6 +384,7 @@ class FitTrackRepository(
 
         templates.forEach { template ->
             val currentSpecs = SeedSerialization.decodeTemplateExercises(template.exercisesJson)
+            val isHomeTpl = SeedExerciseCatalog.isHomeTemplate(template)
             val isAffected = (affectedTemplateId != null && template.id == affectedTemplateId) ||
                 affectedExerciseIds.isEmpty() ||
                 currentSpecs.any { it.exerciseId in affectedExerciseIds }
@@ -375,8 +409,8 @@ class FitTrackRepository(
                     val starter = starterDefaultsByExerciseId[spec.exerciseId]
                     spec.copy(
                         targetSets = starter?.targetSets ?: 3,
-                        targetReps = starter?.targetReps ?: 10,
-                        targetWeightKg = starter?.targetWeightKg ?: 20.0
+                        targetReps = starter?.targetReps ?: if (isHomeTpl) 12 else 10,
+                        targetWeightKg = starter?.targetWeightKg ?: if (isHomeTpl) 0.0 else 20.0
                     )
                 }
             }

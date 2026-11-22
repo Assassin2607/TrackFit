@@ -1,5 +1,7 @@
 package com.example.domain.calc
 
+import com.example.domain.model.ActivityLevel
+import com.example.domain.model.Gender
 import com.example.domain.model.GoalType
 import kotlin.math.abs
 import kotlin.math.max
@@ -19,6 +21,43 @@ data class WeightTrendSummary(
     val trend30DayKgPerWeek: Double?,
     val projectedWeeksToGoal: Int?,
     val rollingSeries: List<Pair<String, Double>>
+)
+
+enum class EstimatedWeightDirection {
+    LOSING,
+    GAINING,
+    MAINTAINING,
+    NEED_DATA
+}
+
+data class DailyNutritionActivityInput(
+    val dateKey: String,
+    val foodCalories: Int,
+    val workoutBurnKcal: Int,
+    val cardioBurnKcal: Int
+)
+
+data class DailyEstimatedWeightPoint(
+    val dateKey: String,
+    val shortLabel: String,
+    val estimatedWeightKg: Double,
+    val foodCalories: Int,
+    val dailyBalanceKcal: Int,
+    val deltaKg: Double,
+    val hasNutritionData: Boolean,
+    val actualScaleWeightKg: Double? = null
+)
+
+data class EstimatedWeightSummary(
+    val anchorWeightKg: Double,
+    val anchorDateKey: String,
+    val daysSinceAnchor: Int,
+    val estimatedCurrentWeightKg: Double,
+    val deltaSinceAnchorKg: Double,
+    val weeklyProjectedRateKg: Double,
+    val loggedNutritionDays: Int,
+    val direction: EstimatedWeightDirection,
+    val dailySeries: List<DailyEstimatedWeightPoint>
 )
 
 data class DailyScoreComponent(
@@ -169,6 +208,130 @@ object AnalyticsEngines {
     }
 
     /**
+     * Estimates daily body weight progression from the user's scale anchor(s) and daily
+     * nutrition + training calorie balance (7,700 kcal ≈ 1 kg tissue).
+     * Days without any food logged hold the running estimate steady so missed logging days
+     * never fabricate fake weight loss.
+     */
+    fun calculateCalorieEstimatedWeight(
+        weightLogs: List<WeightPoint>,
+        fallbackWeightKg: Double,
+        heightCm: Double,
+        age: Int,
+        gender: Gender,
+        activityLevel: ActivityLevel,
+        dailyLogsByDateKey: Map<String, DailyNutritionActivityInput>,
+        todayDateKey: String,
+        orderedDateKeys: List<String> = (29 downTo 0).map { FitnessCalculations.dateKeyDaysAgo(it) }
+    ): EstimatedWeightSummary {
+        val keys = orderedDateKeys.ifEmpty { listOf(todayDateKey) }
+        val sortedLogs = weightLogs.sortedBy { it.epochMs }
+        val scaleByDate = sortedLogs
+            .groupBy { it.dateKey }
+            .mapValues { (_, list) -> list.maxBy { it.epochMs }.weightKg }
+
+        val latestScalePoint = sortedLogs.lastOrNull { it.dateKey <= todayDateKey } ?: sortedLogs.lastOrNull()
+        val anchorWeightKg = latestScalePoint?.weightKg ?: fallbackWeightKg.coerceIn(25.0, 350.0)
+        val anchorDateKey = latestScalePoint?.dateKey ?: todayDateKey
+
+        // Find starting weight at the beginning of the evaluation window
+        val earliestPriorScale = sortedLogs.lastOrNull { it.dateKey < keys.first() }
+        val firstInWindowIdx = keys.indexOfFirst { scaleByDate.containsKey(it) }
+        val startIdx = when {
+            earliestPriorScale != null -> 0
+            firstInWindowIdx >= 0 -> firstInWindowIdx
+            else -> max(0, keys.size - 7)
+        }
+        var runningWeightKg = when {
+            earliestPriorScale != null -> earliestPriorScale.weightKg
+            firstInWindowIdx >= 0 -> scaleByDate[keys[firstInWindowIdx]] ?: anchorWeightKg
+            else -> anchorWeightKg
+        }.coerceIn(25.0, 350.0)
+
+        val evaluatedPoints = mutableListOf<DailyEstimatedWeightPoint>()
+        for (idx in startIdx until keys.size) {
+            val dk = keys[idx]
+            val scaleKg = scaleByDate[dk]
+            if (scaleKg != null) {
+                runningWeightKg = scaleKg.coerceIn(25.0, 350.0)
+            }
+
+            val input = dailyLogsByDateKey[dk]
+            val foodKcal = input?.foodCalories ?: 0
+            val hasNutrition = foodKcal > 0
+            var balanceKcal = 0
+            var deltaKg = 0.0
+
+            if (hasNutrition) {
+                val bmr = FitnessCalculations.calculateBmr(runningWeightKg, heightCm, age, gender)
+                val eb = FitnessCalculations.calculateEnergyBalance(
+                    bmr = bmr,
+                    activityLevel = activityLevel,
+                    foodIntakeKcal = foodKcal,
+                    workoutBurnKcal = input?.workoutBurnKcal ?: 0,
+                    cardioBurnKcal = input?.cardioBurnKcal ?: 0
+                )
+                balanceKcal = eb.estimatedBalanceKcal
+                // Cap single-day tissue shift at ±0.18 kg so partial-day morning logs never swing wildly
+                deltaKg = (eb.estimatedWeightChangeKg).coerceIn(-0.18, 0.18)
+                runningWeightKg = (runningWeightKg + deltaKg).coerceIn(25.0, 350.0)
+            }
+
+            evaluatedPoints.add(
+                DailyEstimatedWeightPoint(
+                    dateKey = dk,
+                    shortLabel = dk.takeLast(2),
+                    estimatedWeightKg = runningWeightKg,
+                    foodCalories = foodKcal,
+                    dailyBalanceKcal = balanceKcal,
+                    deltaKg = deltaKg,
+                    hasNutritionData = hasNutrition,
+                    actualScaleWeightKg = scaleKg
+                )
+            )
+        }
+
+        val estimatedCurrentKg = evaluatedPoints.lastOrNull()?.estimatedWeightKg ?: anchorWeightKg
+        val deltaSinceAnchor = estimatedCurrentKg - anchorWeightKg
+
+        val anchorIdxInKeys = keys.indexOf(anchorDateKey)
+        val daysSinceAnchor = if (anchorIdxInKeys >= 0) {
+            (keys.lastIndex - anchorIdxInKeys).coerceAtLeast(0)
+        } else {
+            keys.size
+        }
+
+        val trailing7 = evaluatedPoints.takeLast(7)
+        val loggedDaysInWindow = trailing7.filter { it.hasNutritionData }
+        val loggedCount = loggedDaysInWindow.size
+        val weeklyRateKg = if (loggedCount > 0) {
+            val avgDailyDelta = loggedDaysInWindow.map { it.deltaKg }.average()
+            (avgDailyDelta * 7.0).coerceIn(-1.5, 1.5)
+        } else {
+            0.0
+        }
+
+        val direction = when {
+            loggedCount == 0 -> EstimatedWeightDirection.NEED_DATA
+            weeklyRateKg <= -0.10 -> EstimatedWeightDirection.LOSING
+            weeklyRateKg >= 0.10 -> EstimatedWeightDirection.GAINING
+            else -> EstimatedWeightDirection.MAINTAINING
+        }
+
+        return EstimatedWeightSummary(
+            anchorWeightKg = anchorWeightKg,
+            anchorDateKey = anchorDateKey,
+            daysSinceAnchor = daysSinceAnchor,
+            estimatedCurrentWeightKg = estimatedCurrentKg,
+            deltaSinceAnchorKg = deltaSinceAnchor,
+            weeklyProjectedRateKg = weeklyRateKg,
+            loggedNutritionDays = loggedCount,
+            direction = direction,
+            dailySeries = trailing7
+        )
+    }
+
+    /**
      * Transparent, deterministic Daily Score out of 100:
      * - Nutrition Adherence: 25 pts
      * - Protein Target: 20 pts
@@ -286,8 +449,24 @@ object AnalyticsEngines {
     ): PrDetectionResult {
         val est1Rm = FitnessCalculations.estimateOneRepMax(weightKg, reps)
         val volume = FitnessCalculations.calculateSetVolume(weightKg, reps)
-        if (isWarmup || weightKg <= 0.0 || reps <= 0) {
+        if (isWarmup || reps <= 0 || weightKg < 0.0) {
             return PrDetectionResult(false, emptyList(), est1Rm, volume)
+        }
+
+        // Bodyweight PR support: beating previous max reps on bodyweight (0 kg) sets
+        if (weightKg == 0.0) {
+            val priorBw = historicalSets.filter { it.exerciseId == exerciseId && !it.warmup && it.weightKg <= 0.01 && it.reps > 0 }
+            if (priorBw.isEmpty()) {
+                return PrDetectionResult(false, emptyList(), 0.0, 0.0)
+            }
+            val maxPriorBwReps = priorBw.maxOf { it.reps }
+            val hits = if (reps > maxPriorBwReps) listOf(PrCategory.MOST_REPS_AT_WEIGHT) else emptyList()
+            return PrDetectionResult(
+                isNewPr = hits.isNotEmpty(),
+                categories = hits,
+                estimated1RmKg = 0.0,
+                setVolumeKg = 0.0
+            )
         }
 
         val priorWorking = historicalSets.filter { it.exerciseId == exerciseId && !it.warmup && it.weightKg > 0 && it.reps > 0 }

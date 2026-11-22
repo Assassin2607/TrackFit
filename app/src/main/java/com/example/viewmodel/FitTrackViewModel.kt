@@ -1,5 +1,6 @@
 package com.example.viewmodel
 
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -26,8 +27,12 @@ import com.example.data.seed.TemplateExerciseSpec
 import com.example.domain.calc.AchievementItem
 import com.example.domain.calc.AdaptiveRecommendation
 import com.example.domain.calc.AnalyticsEngines
+import com.example.domain.calc.DailyEstimatedWeightPoint
+import com.example.domain.calc.DailyNutritionActivityInput
 import com.example.domain.calc.DailyScoreBreakdown
 import com.example.domain.calc.EnergyBalanceEstimate
+import com.example.domain.calc.EstimatedWeightDirection
+import com.example.domain.calc.EstimatedWeightSummary
 import com.example.domain.calc.FitnessCalculations
 import com.example.domain.calc.HistoricalSetRecord
 import com.example.domain.calc.NutritionCoachingCard
@@ -41,6 +46,7 @@ import com.example.domain.model.MealType
 import com.example.domain.model.PhotoType
 import com.example.domain.model.SyncState
 import com.example.domain.model.UnitSystem
+import com.example.notifications.FitTrackNotificationManager
 import com.example.BuildConfig
 import com.example.data.remote.AppUpdateStatus
 import com.example.data.remote.GitHubUpdateChecker
@@ -165,6 +171,17 @@ data class FitTrackUiState(
     val dailyScore: DailyScoreBreakdown = AnalyticsEngines.calculateDailyScore(0, 2100, 0, 160, false, 0, 4, 0, 20, false, false, 0),
     val energyBalance: EnergyBalanceEstimate = EnergyBalanceEstimate(2400, 0, 0, 0, 2400, -2400, -0.31),
     val weightTrend: WeightTrendSummary = WeightTrendSummary(null, null, null, null, null, emptyList()),
+    val estimatedWeight: EstimatedWeightSummary = EstimatedWeightSummary(
+        anchorWeightKg = 75.0,
+        anchorDateKey = FitnessCalculations.todayDateKey(),
+        daysSinceAnchor = 0,
+        estimatedCurrentWeightKg = 75.0,
+        deltaSinceAnchorKg = 0.0,
+        weeklyProjectedRateKg = 0.0,
+        loggedNutritionDays = 0,
+        direction = EstimatedWeightDirection.NEED_DATA,
+        dailySeries = emptyList()
+    ),
     val goalProgressPercent: Int = 0,
     val weeklyCaloriesSeries: List<DailyCaloriePoint> = emptyList(),
     val weeklyCalorieTarget: Int = 14700,
@@ -182,6 +199,7 @@ data class FitTrackUiState(
 )
 
 class FitTrackViewModel(
+    private val appContext: Context,
     private val repository: FitTrackRepository,
     private val preferencesManager: PreferencesManager,
     private val currentUserId: String,
@@ -213,6 +231,8 @@ class FitTrackViewModel(
         viewModelScope.launch {
             repository.initializeUserSession(currentUserId)
             _isInitialized.value = true
+            val currentPrefs = preferencesManager.preferencesFlow.first()
+            FitTrackNotificationManager.syncScheduledReminders(appContext, currentPrefs)
             val effectiveRepo = resolveEffectiveGitHubRepo()
             if (effectiveRepo.isNotBlank()) {
                 checkForAppUpdates(manual = false, repoOverride = effectiveRepo)
@@ -419,16 +439,52 @@ class FitTrackViewModel(
         )
 
         val goalType = GoalType.fromNameSafe(profile?.goalType)
+        val weightPoints = metrics.weights.map { WeightPoint(it.dateKey, it.weightKg, it.recordedAtEpochMs) }
         val weightTrend = AnalyticsEngines.calculateWeightTrend(
-            points = metrics.weights.map { WeightPoint(it.dateKey, it.weightKg, it.recordedAtEpochMs) },
+            points = weightPoints,
             goalWeightKg = profile?.goalWeightKg,
             goalType = goalType
         )
 
+        // Calorie-deficit daily estimated weight progression from scale anchor(s) + nutrition logs
+        val orderedLast30Keys = (29 downTo 0).map { FitnessCalculations.dateKeyDaysAgo(it) }
+        val foodCaloriesByDay = nutrition.logs
+            .groupBy { it.dateKey }
+            .mapValues { (_, logs) -> logs.sumOf { it.calories }.roundToInt() }
+        val workoutBurnByDay = training.sessions
+            .groupBy { it.dateKey }
+            .mapValues { (_, sessions) -> sessions.sumOf { it.estimatedCalories } }
+        val cardioBurnByDay = training.cardio
+            .groupBy { it.dateKey }
+            .mapValues { (_, cardio) -> cardio.sumOf { it.caloriesEstimated } }
+        val dailyInputsMap = orderedLast30Keys.associateWith { dk ->
+            DailyNutritionActivityInput(
+                dateKey = dk,
+                foodCalories = foodCaloriesByDay[dk] ?: 0,
+                workoutBurnKcal = workoutBurnByDay[dk] ?: 0,
+                cardioBurnKcal = cardioBurnByDay[dk] ?: 0
+            )
+        }
+        val estimatedWeight = AnalyticsEngines.calculateCalorieEstimatedWeight(
+            weightLogs = weightPoints,
+            fallbackWeightKg = weightKg,
+            heightCm = profile?.heightCm ?: 175.0,
+            age = profile?.age ?: 26,
+            gender = Gender.fromNameSafe(profile?.gender),
+            activityLevel = ActivityLevel.fromNameSafe(profile?.activityLevel),
+            dailyLogsByDateKey = dailyInputsMap,
+            todayDateKey = todayKey,
+            orderedDateKeys = orderedLast30Keys
+        )
+
         val startWeight = profile?.startingWeightKg ?: metrics.weights.firstOrNull()?.weightKg ?: weightKg
-        val latestWeight = weightTrend.latestWeightKg ?: weightKg
+        val effectiveCurrentWeight = if (estimatedWeight.loggedNutritionDays > 0) {
+            estimatedWeight.estimatedCurrentWeightKg
+        } else {
+            weightTrend.latestWeightKg ?: weightKg
+        }
         val goalProgress = if (profile != null) {
-            FitnessCalculations.calculateGoalProgressPercent(startWeight, latestWeight, profile.goalWeightKg)
+            FitnessCalculations.calculateGoalProgressPercent(startWeight, effectiveCurrentWeight, profile.goalWeightKg)
         } else 0
 
         // Weekly calorie budget & hydration series (oldest -> today)
@@ -563,6 +619,7 @@ class FitTrackViewModel(
             dailyScore = dailyScore,
             energyBalance = energyBalance,
             weightTrend = weightTrend,
+            estimatedWeight = estimatedWeight,
             goalProgressPercent = goalProgress,
             weeklyCaloriesSeries = weeklySeries,
             weeklyCalorieTarget = calorieTarget * 7,
@@ -687,6 +744,24 @@ class FitTrackViewModel(
     ) {
         viewModelScope.launch {
             preferencesManager.setReminderPreference(workout, meal, weight, weeklyReport, prAlerts)
+            val updated = preferencesManager.preferencesFlow.first()
+            FitTrackNotificationManager.syncScheduledReminders(appContext, updated)
+        }
+    }
+
+    fun syncRemindersNow() {
+        viewModelScope.launch {
+            val prefs = preferencesManager.preferencesFlow.first()
+            FitTrackNotificationManager.syncScheduledReminders(appContext, prefs)
+        }
+    }
+
+    fun sendTestNotification() {
+        val sent = FitTrackNotificationManager.postTestNotification(appContext)
+        if (sent) {
+            postMessage("Test notification sent! Check your notification shade.")
+        } else {
+            postMessage("Enable notification permission first to receive alerts.")
         }
     }
 
@@ -717,14 +792,15 @@ class FitTrackViewModel(
         templateId: String?,
         name: String,
         description: String,
-        exercises: List<TemplateExerciseSpec>
+        exercises: List<TemplateExerciseSpec>,
+        isHomeWorkout: Boolean = false
     ) {
         if (name.isBlank() || exercises.isEmpty()) {
             postMessage("Add a name and at least one exercise.")
             return
         }
         viewModelScope.launch {
-            repository.saveWorkoutTemplate(currentUserId, templateId, name, description, exercises)
+            repository.saveWorkoutTemplate(currentUserId, templateId, name, description, exercises, isHomeWorkout)
             postMessage("Saved template: $name")
         }
     }
@@ -747,7 +823,11 @@ class FitTrackViewModel(
         val exercises = specs.map { spec ->
             val prevSets = findLastSessionSetsForExercise(spec.exerciseId, state.allWorkoutSets, validSessionIds)
             val prevSummary = prevSets.map { s ->
-                "${FitnessCalculations.formatWeight(s.weightKg, unitSystem)} × ${s.reps}"
+                if (s.weightKg <= 0.01) {
+                    "BW × ${s.reps}"
+                } else {
+                    "${FitnessCalculations.formatWeight(s.weightKg, unitSystem)} × ${s.reps}"
+                }
             }
             val initialSets = if (prevSets.isNotEmpty()) {
                 prevSets.mapIndexed { idx, s ->
@@ -972,8 +1052,16 @@ class FitTrackViewModel(
         stopRestTimer()
         _activeWorkout.value = null
 
+        val prAlertsEnabled = uiState.value.preferences.prAlertsEnabled
         viewModelScope.launch {
             repository.saveCompletedWorkout(session, completedSets)
+            if (prCount > 0 && prAlertsEnabled) {
+                FitTrackNotificationManager.postPrAlertNotification(
+                    context = appContext,
+                    workoutName = session.templateName,
+                    prCount = prCount
+                )
+            }
             val prSuffix = if (prCount > 0) " • $prCount NEW PR!" else ""
             postMessage("Workout saved (${completedSets.size} sets)$prSuffix")
         }

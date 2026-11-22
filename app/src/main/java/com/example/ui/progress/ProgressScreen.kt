@@ -153,16 +153,19 @@ fun ProgressScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 TrendMetric(
+                                    "Est. Today",
+                                    FitnessCalculations.formatWeight(state.estimatedWeight.estimatedCurrentWeightKg, unit)
+                                )
+                                TrendMetric(
                                     "7-Day Avg",
                                     state.weightTrend.rolling7DayAvgKg?.let { FitnessCalculations.formatWeight(it, unit) } ?: "--"
                                 )
                                 TrendMetric(
                                     "14-Day Rate",
-                                    state.weightTrend.trend14DayKgPerWeek?.let { FitnessCalculations.formatSignedWeightRate(it, unit) } ?: "--"
-                                )
-                                TrendMetric(
-                                    "30-Day Rate",
-                                    state.weightTrend.trend30DayKgPerWeek?.let { FitnessCalculations.formatSignedWeightRate(it, unit) } ?: "--"
+                                    state.weightTrend.trend14DayKgPerWeek?.let { FitnessCalculations.formatSignedWeightRate(it, unit) }
+                                        ?: if (state.estimatedWeight.loggedNutritionDays > 0) {
+                                            FitnessCalculations.formatSignedWeightRate(state.estimatedWeight.weeklyProjectedRateKg, unit)
+                                        } else "--"
                                 )
                             }
                             Spacer(modifier = Modifier.height(12.dp))

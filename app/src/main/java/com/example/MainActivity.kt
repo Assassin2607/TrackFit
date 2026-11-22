@@ -89,6 +89,7 @@ import com.example.ui.progress.ProgressScreen
 import com.example.ui.theme.FitTrackSection
 import com.example.ui.theme.FitTrackTheme
 import com.example.ui.theme.rememberAnimatedShellPalette
+import com.example.notifications.FitTrackNotificationManager
 import com.example.ui.workout.ActiveWorkoutScreen
 import com.example.ui.workout.CardioLogDialog
 import com.example.ui.workout.WorkoutScreen
@@ -120,6 +121,7 @@ private enum class FitTrackTab(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        FitTrackNotificationManager.ensureChannels(this)
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
@@ -181,6 +183,7 @@ private fun FitTrackAuthenticatedShell(
                 val prefs = PreferencesManager(app)
                 val bundledRepo = app.getString(R.string.github_releases_repo).trim()
                 FitTrackViewModel(
+                    appContext = app.applicationContext,
                     repository = repo,
                     preferencesManager = prefs,
                     currentUserId = currentUserId,
@@ -487,6 +490,8 @@ private fun FitTrackAuthenticatedShell(
                                         onUpdateProfile = viewModel::updateProfile,
                                         onUnitSystemChange = viewModel::setUnitSystem,
                                         onUpdateReminders = viewModel::updateReminderPrefs,
+                                        onSyncReminders = viewModel::syncRemindersNow,
+                                        onSendTestNotification = viewModel::sendTestNotification,
                                         onManualSync = viewModel::triggerManualSync,
                                         onExportData = viewModel::exportData,
                                         onClearWorkouts = viewModel::clearWorkoutHistory,

@@ -6,7 +6,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,14 +21,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.MonitorWeight
 import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.material.icons.rounded.TrendingDown
+import androidx.compose.material.icons.rounded.TrendingFlat
+import androidx.compose.material.icons.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -62,20 +71,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.data.remote.AppUpdateStatus
+import com.example.domain.calc.EstimatedWeightDirection
+import com.example.domain.calc.EstimatedWeightSummary
 import com.example.domain.calc.FitnessCalculations
 import com.example.domain.model.GoalType
 import com.example.domain.model.UnitSystem
-import com.example.ui.components.DailyScoreRing
 import com.example.ui.components.FitTrackCard
 import com.example.ui.components.Hydration3DRing
 import com.example.ui.components.MacroProgressBar
 import com.example.ui.components.SyncStatusBadge
 import com.example.ui.theme.FitTrackThemeExt
-import com.example.ui.theme.HomeIndigoTop
-import com.example.ui.theme.HomeTerracotta
 import com.example.ui.theme.MonoMetricMedium
 import com.example.ui.theme.MonoMetricSmall
 import com.example.viewmodel.FitTrackUiState
+import kotlin.math.abs
 import kotlin.math.max
 
 @Composable
@@ -98,6 +107,7 @@ fun DashboardScreen(
 
     var showScoreBreakdown by remember { mutableStateOf(false) }
     var showWeightDialog by remember { mutableStateOf(false) }
+    var showWeightEstimateDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier
@@ -203,86 +213,55 @@ fun DashboardScreen(
             }
         }
 
-        // 1. HERO: Today's Score — Layered 3D Depth Slab + Sculpted 3D Ring
+        // 1. HERO: Today's Score — Game-HUD Rank Crest + 20-Segment Power Gauge + 5 Quest Bars
         item {
-            FitTrackCard(
-                onClick = { showScoreBreakdown = true },
-                containerColor = lerp(HomeIndigoTop, HomeTerracotta, 0.14f),
-                accentGradientEnd = ext.cardSurfaceBottom,
-                borderColor = HomeTerracotta.copy(alpha = 0.55f),
-                depthElevation = 7.dp,
-                modifier = Modifier.testTag("daily_score_card")
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    DailyScoreRing(score = state.dailyScore.totalScore, size = 118.dp)
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Today's Score",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Surface(
-                                shape = RoundedCornerShape(999.dp),
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-                            ) {
-                                Text(
-                                    text = "${state.activeStreakDays}d streak",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.secondary,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = if (state.dailyScore.totalScore >= 75) {
-                                "Strong alignment with your ${goalType.label.lowercase()} targets."
-                            } else {
-                                "Tap to inspect your 5-pillar daily score."
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = ext.mutedText
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Mini3DScoreChip("Food", "${state.dailyScore.nutritionPoints}/25", Modifier.weight(1f))
-                            Mini3DScoreChip("Pro", "${state.dailyScore.proteinPoints}/20", Modifier.weight(1f))
-                            Mini3DScoreChip("Lift", "${state.dailyScore.workoutPoints}/25", Modifier.weight(1f))
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Tap card for full breakdown →",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.secondary,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
+            GameScoreHeroCard(
+                dailyScore = state.dailyScore,
+                activeStreakDays = state.activeStreakDays,
+                goalType = goalType,
+                onClick = { showScoreBreakdown = true }
+            )
         }
 
-        // 2. WEIGHT & TREND — Layered 3D Depth KPI + Mini Sparkline + Progress Well
+        // 2. WEIGHT & TREND — Calorie-Deficit Daily Estimated Weight + Sparkline + 7-Day Breakdown
         item {
-            val latestKg = state.weightTrend.latestWeightKg ?: profile?.currentWeightKg ?: 75.0
+            val est = state.estimatedWeight
             val goalKg = profile?.goalWeightKg ?: 70.0
-            val rolling7Kg = state.weightTrend.rolling7DayAvgKg
-            val trendRate = state.weightTrend.trend14DayKgPerWeek ?: state.weightTrend.trend30DayKgPerWeek
-            val sparkValues = remember(state.weightLogs) {
-                state.weightLogs.takeLast(10).map { it.weightKg }
+            val estCurrentKg = est.estimatedCurrentWeightKg
+            val anchorKg = est.anchorWeightKg
+            val deltaDisplay = FitnessCalculations.kgToDisplay(est.deltaSinceAnchorKg, unit)
+            val hasMeaningfulDelta = abs(est.deltaSinceAnchorKg) >= 0.04
+
+            val directionAccent = when (est.direction) {
+                EstimatedWeightDirection.LOSING -> if (goalType == GoalType.BULK) ext.warning else ext.success
+                EstimatedWeightDirection.GAINING -> if (goalType == GoalType.CUT) ext.warning else ext.success
+                EstimatedWeightDirection.MAINTAINING -> MaterialTheme.colorScheme.secondary
+                EstimatedWeightDirection.NEED_DATA -> ext.mutedText
+            }
+            val directionIcon = when (est.direction) {
+                EstimatedWeightDirection.LOSING -> Icons.Rounded.TrendingDown
+                EstimatedWeightDirection.GAINING -> Icons.Rounded.TrendingUp
+                else -> Icons.Rounded.TrendingFlat
+            }
+            val directionLabel = when (est.direction) {
+                EstimatedWeightDirection.LOSING ->
+                    "Losing ${FitnessCalculations.formatSignedWeightRate(est.weeklyProjectedRateKg, unit)}"
+                EstimatedWeightDirection.GAINING ->
+                    "Gaining ${FitnessCalculations.formatSignedWeightRate(est.weeklyProjectedRateKg, unit)}"
+                EstimatedWeightDirection.MAINTAINING ->
+                    "Holding steady (${FitnessCalculations.formatSignedWeightRate(est.weeklyProjectedRateKg, unit)})"
+                EstimatedWeightDirection.NEED_DATA ->
+                    "Log meals to estimate daily weight"
+            }
+
+            // Use calorie-estimated daily series when nutrition logs exist (or scale logs if multiple)
+            val sparkValues = remember(est.dailySeries, state.weightLogs) {
+                val estVals = est.dailySeries.map { it.estimatedWeightKg }
+                if (est.loggedNutritionDays >= 1 && estVals.size >= 2) {
+                    estVals
+                } else {
+                    state.weightLogs.takeLast(10).map { it.weightKg }
+                }
             }
 
             FitTrackCard(
@@ -295,7 +274,10 @@ fun DashboardScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
@@ -317,14 +299,24 @@ fun DashboardScreen(
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
-                            Text(
-                                text = trendRate?.let { "Trend: ${FitnessCalculations.formatSignedWeightRate(it, unit)}" }
-                                    ?: "Log weigh-ins to plot trend",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = directionIcon,
+                                    contentDescription = null,
+                                    tint = directionAccent,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = directionLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = directionAccent,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
                     }
+                    Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = { showWeightDialog = true },
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
@@ -342,22 +334,30 @@ fun DashboardScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Dual 3D Recessed Stat Wells
+                // Dual 3D Recessed Stat Wells: Daily Calorie-Estimated Weight + Goal Weight
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    val estSubLabel = if (hasMeaningfulDelta) {
+                        val sign = if (deltaDisplay > 0) "+" else ""
+                        val dayText = if (est.daysSinceAnchor == 0) "today" else "${est.daysSinceAnchor}d ago"
+                        "${sign}${String.format("%.2f", deltaDisplay)} ${unit.weightUnit} from ${FitnessCalculations.formatWeight(anchorKg, unit)} ($dayText)"
+                    } else {
+                        "Last scale: ${FitnessCalculations.formatWeight(anchorKg, unit)}"
+                    }
                     RecessedStatWell(
-                        label = "7-Day Rolling Avg",
-                        value = FitnessCalculations.formatWeight(rolling7Kg ?: latestKg, unit),
-                        subLabel = "Latest: ${FitnessCalculations.formatWeight(latestKg, unit)}",
-                        valueColor = ext.success,
+                        label = "Est. Weight Today",
+                        value = "~${FitnessCalculations.formatWeight(estCurrentKg, unit)}",
+                        subLabel = estSubLabel,
+                        valueColor = directionAccent,
                         modifier = Modifier.weight(1f)
                     )
                     RecessedStatWell(
                         label = "Goal Weight",
                         value = FitnessCalculations.formatWeight(goalKg, unit),
-                        subLabel = state.weightTrend.projectedWeeksToGoal?.let { "~${it} wks est." } ?: "${state.goalProgressPercent}% reached",
+                        subLabel = state.weightTrend.projectedWeeksToGoal?.let { "~${it} wks est." }
+                            ?: "${state.goalProgressPercent}% reached",
                         valueColor = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f)
                     )
@@ -367,11 +367,62 @@ fun DashboardScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                     MiniWeightSparkline(
                         values = sparkValues,
-                        lineColor = ext.success,
+                        lineColor = directionAccent,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(44.dp)
                     )
+                }
+
+                // Calorie-Based 7-Day Daily Estimate Strip + Interactive Breakdown Button
+                if (est.dailySeries.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = ext.cardBottomShadow.copy(alpha = 0.45f),
+                        border = BorderStroke(1.dp, ext.cardTopHighlight.copy(alpha = 0.25f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showWeightEstimateDialog = true }
+                            .testTag("weight_daily_estimate_button")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 9.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.CalendarMonth,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (est.loggedNutritionDays > 0) {
+                                        "Calorie-estimated from ${est.loggedNutritionDays} logged day${if (est.loggedNutritionDays > 1) "s" else ""} (no daily scale needed)"
+                                    } else {
+                                        "Log daily meals to project weight from ${FitnessCalculations.formatWeight(anchorKg, unit)}"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = ext.mutedText
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "7-Day Log ▸",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -599,31 +650,67 @@ fun DashboardScreen(
         item { Spacer(modifier = Modifier.height(8.dp)) }
     }
 
-    // Score Breakdown Modal
+    // Score Breakdown Modal (with Game Rank Emblem & Pillar Progress Bars)
     if (showScoreBreakdown) {
+        val rank = resolveDailyScoreRank(state.dailyScore.totalScore)
         AlertDialog(
             onDismissRequest = { showScoreBreakdown = false },
             title = {
-                Text("Daily Score Breakdown (${state.dailyScore.totalScore}/100)")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RankShieldCrest(rank = rank, size = 36.dp)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Daily Quest Breakdown",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "${state.dailyScore.totalScore}/100 PTS • RANK ${rank.grade} (${rank.title})",
+                            style = MonoMetricSmall,
+                            color = rank.primaryColor,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = "Deterministic formula across 5 daily pillars:",
+                        text = "Deterministic scoring across 5 daily pillars:",
                         style = MaterialTheme.typography.bodySmall,
                         color = ext.mutedText
                     )
                     state.dailyScore.components.forEach { comp ->
-                        Column {
+                        val ratio = if (comp.maxPoints > 0) {
+                            (comp.earned.toFloat() / comp.maxPoints.toFloat()).coerceIn(0f, 1f)
+                        } else 0f
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(comp.label, style = MaterialTheme.typography.titleSmall)
+                                Text(comp.label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                                 Text(
                                     text = "${comp.earned} / ${comp.maxPoints}",
                                     style = MonoMetricSmall,
-                                    color = MaterialTheme.colorScheme.secondary
+                                    color = if (comp.earned >= comp.maxPoints) ext.success else MaterialTheme.colorScheme.secondary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(ratio)
+                                        .height(6.dp)
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .background(if (comp.earned >= comp.maxPoints) ext.success else rank.primaryColor)
                                 )
                             }
                             Text(
@@ -639,6 +726,19 @@ fun DashboardScreen(
                 TextButton(onClick = { showScoreBreakdown = false }) {
                     Text("Got it")
                 }
+            }
+        )
+    }
+
+    // 7-Day Calorie-Estimated Weight Breakdown Modal
+    if (showWeightEstimateDialog) {
+        WeightEstimateBreakdownDialog(
+            summary = state.estimatedWeight,
+            unit = unit,
+            onDismiss = { showWeightEstimateDialog = false },
+            onOpenWeighIn = {
+                showWeightEstimateDialog = false
+                showWeightDialog = true
             }
         )
     }
@@ -694,31 +794,120 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun Mini3DScoreChip(label: String, score: String, modifier: Modifier = Modifier) {
+private fun WeightEstimateBreakdownDialog(
+    summary: EstimatedWeightSummary,
+    unit: UnitSystem,
+    onDismiss: () -> Unit,
+    onOpenWeighIn: () -> Unit
+) {
     val ext = FitTrackThemeExt.colors
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
-        color = ext.cardBottomShadow.copy(alpha = 0.45f),
-        border = BorderStroke(1.dp, ext.cardTopHighlight.copy(alpha = 0.35f))
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = ext.mutedText
-            )
-            Text(
-                text = score,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Bold
-            )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Text("7-Day Calorie Weight Estimate", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "Anchor: ${FitnessCalculations.formatWeight(summary.anchorWeightKg, unit)} (${summary.anchorDateKey})",
+                    style = MonoMetricSmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Each day's nutrition balance (food minus TDEE & exercise ÷ 7,700 kcal/kg) projects your rough weight so you know if you're losing or gaining without daily scale checks.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ext.mutedText
+                )
+
+                summary.dailySeries.reversed().forEach { pt ->
+                    val balSign = if (pt.dailyBalanceKcal > 0) "+" else ""
+                    val deltaDisplay = FitnessCalculations.kgToDisplay(pt.deltaKg, unit)
+                    val deltaStr = if (pt.hasNutritionData) {
+                        val s = if (deltaDisplay > 0) "+" else ""
+                        "$s${String.format("%.2f", deltaDisplay)} ${unit.weightUnit}"
+                    } else {
+                        "No meals"
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                        border = BorderStroke(
+                            1.dp,
+                            if (pt.actualScaleWeightKg != null) MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
+                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = pt.dateKey,
+                                        style = MonoMetricSmall,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    if (pt.actualScaleWeightKg != null) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "SCALE",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.secondary,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = if (pt.hasNutritionData) {
+                                        "${pt.foodCalories} kcal • ${balSign}${pt.dailyBalanceKcal} bal"
+                                    } else {
+                                        "No food logged (held steady)"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = ext.mutedText
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "~${FitnessCalculations.formatWeight(pt.estimatedWeightKg, unit)}",
+                                    style = MonoMetricSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = deltaStr,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = when {
+                                        !pt.hasNutritionData -> ext.mutedText
+                                        pt.deltaKg < -0.005 -> ext.success
+                                        pt.deltaKg > 0.005 -> ext.warning
+                                        else -> ext.mutedText
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onOpenWeighIn) { Text("Log Scale Weight") }
         }
-    }
+    )
 }
 
 @Composable

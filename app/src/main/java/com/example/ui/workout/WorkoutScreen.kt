@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.DirectionsRun
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material.icons.rounded.Star
@@ -71,6 +72,7 @@ import com.example.data.local.ExerciseEntity
 import com.example.data.local.WorkoutSessionEntity
 import com.example.data.local.WorkoutSetEntity
 import com.example.data.local.WorkoutTemplateEntity
+import com.example.data.seed.SeedExerciseCatalog
 import com.example.data.seed.SeedSerialization
 import com.example.data.seed.TemplateExerciseSpec
 import com.example.domain.calc.FitnessCalculations
@@ -96,11 +98,19 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.max
 
+private enum class TrainingEnvironment(
+    val title: String,
+    val subtitle: String
+) {
+    GYM("Gym Training", "Weights & Machines"),
+    HOME("Home Training", "Bodyweight & No-Gym")
+}
+
 @Composable
 fun WorkoutScreen(
     state: FitTrackUiState,
     onStartTemplate: (WorkoutTemplateEntity) -> Unit,
-    onSaveTemplate: (String?, String, String, List<TemplateExerciseSpec>) -> Unit,
+    onSaveTemplate: (String?, String, String, List<TemplateExerciseSpec>, Boolean) -> Unit,
     onDeleteTemplate: (String) -> Unit,
     onAddCustomExercise: (String, String, String, String, String, String) -> Unit,
     onToggleExerciseFavorite: (ExerciseEntity) -> Unit,
@@ -109,16 +119,51 @@ fun WorkoutScreen(
     onDeleteCardio: (String) -> Unit,
     onDeleteWorkoutSession: (String) -> Unit
 ) {
+    var selectedEnvironment by remember { mutableStateOf(TrainingEnvironment.GYM) }
     var selectedSegment by remember { mutableIntStateOf(0) }
     val segments = listOf("Templates", "Cardio", "Exercises", "History")
     val unit = state.preferences.unitSystem
     val ext = FitTrackThemeExt.colors
+    val isHomeMode = selectedEnvironment == TrainingEnvironment.HOME
 
     var showCreateTemplate by remember { mutableStateOf(false) }
     var showCreateExercise by remember { mutableStateOf(false) }
     var showSevenDayVolumeDialog by remember { mutableStateOf(false) }
     var exerciseQuery by remember { mutableStateOf("") }
     var selectedMuscleFilter by remember { mutableStateOf<String?>(null) }
+
+    val homeTemplateIds = remember(state.templates) {
+        state.templates.filter { SeedExerciseCatalog.isHomeTemplate(it) }.map { it.id }.toSet()
+    }
+    val visibleTemplates = remember(state.templates, isHomeMode) {
+        if (isHomeMode) state.templates.filter { SeedExerciseCatalog.isHomeTemplate(it) }
+        else state.templates.filter { !SeedExerciseCatalog.isHomeTemplate(it) }
+    }
+    val visibleExercises = remember(state.exercises, isHomeMode) {
+        if (isHomeMode) state.exercises.filter { SeedExerciseCatalog.isHomeExercise(it) }
+        else state.exercises.filter { !it.id.startsWith("ex_home_") }
+    }
+    val visibleSessions = remember(state.workoutSessions, homeTemplateIds, isHomeMode) {
+        if (isHomeMode) {
+            state.workoutSessions.filter {
+                SeedExerciseCatalog.isHomeSession(it.templateId, it.templateName, homeTemplateIds)
+            }
+        } else {
+            state.workoutSessions.filter {
+                !SeedExerciseCatalog.isHomeSession(it.templateId, it.templateName, homeTemplateIds)
+            }
+        }
+    }
+    val last7Keys = remember(state.selectedDateKey) {
+        (0..6).map { FitnessCalculations.dateKeyDaysAgo(it) }.toSet()
+    }
+    val homeSessionsLast7 = remember(visibleSessions, last7Keys) {
+        visibleSessions.filter { it.dateKey in last7Keys }
+    }
+    val homeRepsLast7 = remember(homeSessionsLast7, state.allWorkoutSets) {
+        val ids = homeSessionsLast7.map { it.id }.toSet()
+        state.allWorkoutSets.filter { it.workoutSessionId in ids && it.completed && !it.warmup }.sumOf { it.reps }
+    }
 
     Column(
         modifier = Modifier
@@ -158,7 +203,46 @@ fun WorkoutScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Clean Two-Button Studio Mode Selector: Gym Training vs Home Training
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                TrainingModeSelectorButton(
+                    title = TrainingEnvironment.GYM.title,
+                    subtitle = TrainingEnvironment.GYM.subtitle,
+                    icon = Icons.Rounded.FitnessCenter,
+                    selected = !isHomeMode,
+                    activeColor = WorkoutCrimson,
+                    activeBorderColor = WorkoutCrimsonBright,
+                    onClick = {
+                        selectedEnvironment = TrainingEnvironment.GYM
+                        selectedMuscleFilter = null
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("mode_gym_training_button")
+                )
+                TrainingModeSelectorButton(
+                    title = TrainingEnvironment.HOME.title,
+                    subtitle = TrainingEnvironment.HOME.subtitle,
+                    icon = Icons.Rounded.Home,
+                    selected = isHomeMode,
+                    activeColor = WorkoutRoyalBlue,
+                    activeBorderColor = WorkoutRoyalBlueGlow,
+                    onClick = {
+                        selectedEnvironment = TrainingEnvironment.HOME
+                        selectedMuscleFilter = null
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("mode_home_training_button")
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Dual-Tone Athletic 3D Split Command Bar (Crimson #701A1F + Royal Blue #1E3A8A)
             Row(
@@ -177,14 +261,14 @@ fun WorkoutScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Rounded.FitnessCenter,
+                            imageVector = if (isHomeMode) Icons.Rounded.Home else Icons.Rounded.FitnessCenter,
                             contentDescription = null,
                             tint = Color.White,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "7-DAY VOLUME",
+                            text = if (isHomeMode) "7-DAY HOME REPS" else "7-DAY VOLUME",
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.White.copy(alpha = 0.85f),
                             fontWeight = FontWeight.Bold
@@ -192,7 +276,11 @@ fun WorkoutScreen(
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = FitnessCalculations.formatVolume(state.weeklyVolumeKg, unit),
+                        text = if (isHomeMode) {
+                            "$homeRepsLast7 reps • ${homeSessionsLast7.size}d"
+                        } else {
+                            FitnessCalculations.formatVolume(state.weeklyVolumeKg, unit)
+                        },
                         style = MonoMetricMedium,
                         color = Color.White,
                         fontWeight = FontWeight.Bold
@@ -267,11 +355,15 @@ fun WorkoutScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             when (selectedSegment) {
-                0 -> { // Templates
+                0 -> { // Templates (Gym or Home)
                     item {
                         SectionHeader(
-                            title = "Workout Templates",
-                            subtitle = "One-tap launch with previous weights & reps pre-loaded",
+                            title = if (isHomeMode) "Home Workout Templates" else "Gym Workout Templates",
+                            subtitle = if (isHomeMode) {
+                                "No-equipment bodyweight routines ready to start anywhere"
+                            } else {
+                                "One-tap launch with previous weights & reps pre-loaded"
+                            },
                             trailing = {
                                 Button(
                                     onClick = { showCreateTemplate = true },
@@ -290,18 +382,22 @@ fun WorkoutScreen(
                         )
                     }
 
-                    if (state.templates.isEmpty()) {
+                    if (visibleTemplates.isEmpty()) {
                         item {
                             EmptyStateCard(
-                                icon = Icons.Rounded.FitnessCenter,
-                                title = "No workout templates yet",
-                                subtitle = "Create a reusable routine like Push Day or Full Body.",
+                                icon = if (isHomeMode) Icons.Rounded.Home else Icons.Rounded.FitnessCenter,
+                                title = if (isHomeMode) "No home templates yet" else "No gym templates yet",
+                                subtitle = if (isHomeMode) {
+                                    "Create a bodyweight routine for home like Full Body or Core Finisher."
+                                } else {
+                                    "Create a reusable routine like Push Day or Full Body."
+                                },
                                 actionLabel = "Create Template",
                                 onAction = { showCreateTemplate = true }
                             )
                         }
                     } else {
-                        items(state.templates, key = { it.id }) { template ->
+                        items(visibleTemplates, key = { it.id }) { template ->
                             val exercises = remember(template.exercisesJson) {
                                 SeedSerialization.decodeTemplateExercises(template.exercisesJson)
                             }
@@ -322,7 +418,8 @@ fun WorkoutScreen(
                                         .clip(RoundedCornerShape(999.dp))
                                         .background(
                                             Brush.horizontalGradient(
-                                                listOf(WorkoutCrimsonBright, WorkoutRoyalBlueBright)
+                                                if (isHomeMode) listOf(WorkoutRoyalBlueBright, WorkoutCrimsonBright)
+                                                else listOf(WorkoutCrimsonBright, WorkoutRoyalBlueBright)
                                             )
                                         )
                                 )
@@ -338,7 +435,8 @@ fun WorkoutScreen(
                                                 text = template.name,
                                                 style = MaterialTheme.typography.titleLarge,
                                                 fontWeight = FontWeight.Bold,
-                                                color = WorkoutCreamText
+                                                color = WorkoutCreamText,
+                                                modifier = Modifier.weight(1f, fill = false)
                                             )
                                             Spacer(modifier = Modifier.width(8.dp))
                                             Surface(
@@ -364,7 +462,12 @@ fun WorkoutScreen(
                                         }
                                         Text(
                                             text = if (lastSession != null) {
-                                                "Last done: ${lastSession.dateKey} • ${FitnessCalculations.formatVolume(lastSession.totalVolumeKg, unit)}"
+                                                val metricSuffix = if (lastSession.totalVolumeKg > 0.0) {
+                                                    FitnessCalculations.formatVolume(lastSession.totalVolumeKg, unit)
+                                                } else {
+                                                    "${lastSession.durationMinutes} min • Bodyweight"
+                                                }
+                                                "Last done: ${lastSession.dateKey} • $metricSuffix"
                                             } else {
                                                 "No completed sessions yet"
                                             },
@@ -384,6 +487,8 @@ fun WorkoutScreen(
                                 exercises.take(5).forEach { ex ->
                                     val wtSuffix = if (ex.targetWeightKg > 0.0) {
                                         " • ${FitnessCalculations.formatWeight(ex.targetWeightKg, unit)}"
+                                    } else if (isHomeMode) {
+                                        " • Bodyweight"
                                     } else ""
                                     Text(
                                         text = "• ${ex.exerciseName} (${ex.targetSets}×${ex.targetReps}$wtSuffix)",
@@ -402,7 +507,7 @@ fun WorkoutScreen(
                                 Button(
                                     onClick = { onStartTemplate(template) },
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = WorkoutCrimson,
+                                        containerColor = if (isHomeMode) WorkoutRoyalBlue else WorkoutCrimson,
                                         contentColor = Color.White
                                     ),
                                     modifier = Modifier
@@ -543,7 +648,7 @@ fun WorkoutScreen(
                         }
                     }
 
-                    val filtered = state.exercises.filter { ex ->
+                    val filtered = visibleExercises.filter { ex ->
                         (selectedMuscleFilter == null || ex.muscleGroup.equals(selectedMuscleFilter, ignoreCase = true)) &&
                             (exerciseQuery.isBlank() || ex.name.contains(exerciseQuery, ignoreCase = true))
                     }
@@ -555,7 +660,7 @@ fun WorkoutScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(ex.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                    Text(ex.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = WorkoutCreamText)
                                     Text(
                                         text = "${MuscleGroup.fromNameSafe(ex.muscleGroup).label} • ${ex.equipment} • ${ex.difficulty}",
                                         style = MaterialTheme.typography.bodySmall,
@@ -582,11 +687,11 @@ fun WorkoutScreen(
                     }
                 }
 
-                3 -> { // History & Volume
+                3 -> { // History & Volume (scoped to Gym or Home)
                     item {
                         FitTrackCard(
-                            containerColor = WorkoutCrimson,
-                            accentGradientEnd = WorkoutRoyalBlue,
+                            containerColor = if (isHomeMode) WorkoutRoyalBlue else WorkoutCrimson,
+                            accentGradientEnd = if (isHomeMode) WorkoutCrimson else WorkoutRoyalBlue,
                             borderColor = WorkoutRoyalBlueGlow.copy(alpha = 0.55f),
                             depthElevation = 6.dp,
                             onClick = { showSevenDayVolumeDialog = true }
@@ -596,31 +701,58 @@ fun WorkoutScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Strength Volume Summary", style = MaterialTheme.typography.titleMedium, color = WorkoutCreamText, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = if (isHomeMode) "Home Training Summary" else "Strength Volume Summary",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = WorkoutCreamText,
+                                    fontWeight = FontWeight.Bold
+                                )
                                 Text("7-Day Log ▸", style = MaterialTheme.typography.labelSmall, color = WorkoutCreamText.copy(alpha = 0.85f))
                             }
                             Spacer(modifier = Modifier.height(10.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                VolumeStat("Today", FitnessCalculations.formatVolume(state.dailyVolumeKg, unit))
-                                VolumeStat("7-Day", FitnessCalculations.formatVolume(state.weeklyVolumeKg, unit))
-                                VolumeStat("30-Day", FitnessCalculations.formatVolume(state.monthlyVolumeKg, unit))
+                            if (isHomeMode) {
+                                val totalHomeSessions = visibleSessions.size
+                                val totalHomeMinutes = visibleSessions.sumOf { it.durationMinutes }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    VolumeStat("7-Day Reps", "$homeRepsLast7")
+                                    VolumeStat("Sessions", "$totalHomeSessions")
+                                    VolumeStat("Total Time", "${totalHomeMinutes}m")
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    VolumeStat("Today", FitnessCalculations.formatVolume(state.dailyVolumeKg, unit))
+                                    VolumeStat("7-Day", FitnessCalculations.formatVolume(state.weeklyVolumeKg, unit))
+                                    VolumeStat("30-Day", FitnessCalculations.formatVolume(state.monthlyVolumeKg, unit))
+                                }
                             }
                         }
                     }
 
-                    if (state.workoutSessions.isEmpty()) {
+                    if (visibleSessions.isEmpty()) {
                         item {
                             EmptyStateCard(
                                 icon = Icons.Rounded.History,
-                                title = "No completed workouts yet",
-                                subtitle = "Start a template to track sets, progressive overload, and automatic PRs."
+                                title = if (isHomeMode) "No home workouts logged yet" else "No completed gym workouts yet",
+                                subtitle = if (isHomeMode) {
+                                    "Start a Home Training template to log reps, sets, calories, and bodyweight PRs."
+                                } else {
+                                    "Start a template to track sets, progressive overload, and automatic PRs."
+                                }
                             )
                         }
                     } else {
-                        items(state.workoutSessions, key = { it.id }) { session ->
+                        items(visibleSessions, key = { it.id }) { session ->
+                            val sessionReps = remember(state.allWorkoutSets, session.id) {
+                                state.allWorkoutSets
+                                    .filter { it.workoutSessionId == session.id && it.completed && !it.warmup }
+                                    .sumOf { it.reps }
+                            }
                             FitTrackCard {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -634,8 +766,13 @@ fun WorkoutScreen(
                                             fontWeight = FontWeight.SemiBold,
                                             color = WorkoutCreamText
                                         )
+                                        val loadMetric = if (session.totalVolumeKg > 0.0) {
+                                            FitnessCalculations.formatVolume(session.totalVolumeKg, unit)
+                                        } else {
+                                            "$sessionReps reps (BW)"
+                                        }
                                         Text(
-                                            text = "${session.dateKey} • ${session.durationMinutes} min • ${FitnessCalculations.formatVolume(session.totalVolumeKg, unit)} • ~${session.estimatedCalories} kcal est.",
+                                            text = "${session.dateKey} • ${session.durationMinutes} min • $loadMetric • ~${session.estimatedCalories} kcal est.",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = ext.mutedText
                                         )
@@ -672,10 +809,11 @@ fun WorkoutScreen(
 
     if (showCreateTemplate) {
         CreateTemplateDialog(
-            exercises = state.exercises,
+            exercises = visibleExercises.ifEmpty { state.exercises },
+            isHomeMode = isHomeMode,
             onDismiss = { showCreateTemplate = false },
             onSave = { name, desc, specs ->
-                onSaveTemplate(null, name, desc, specs)
+                onSaveTemplate(null, name, desc, specs, isHomeMode)
                 showCreateTemplate = false
             }
         )
@@ -683,6 +821,7 @@ fun WorkoutScreen(
 
     if (showCreateExercise) {
         CreateCustomExerciseDialog(
+            defaultEquipment = if (isHomeMode) "Bodyweight" else "Dumbbell",
             onDismiss = { showCreateExercise = false },
             onSave = { name, muscle, secondary, equip, diff, instr ->
                 onAddCustomExercise(name, muscle, secondary, equip, diff, instr)
@@ -699,6 +838,59 @@ fun WorkoutScreen(
             unitSystem = unit,
             onDismiss = { showSevenDayVolumeDialog = false }
         )
+    }
+}
+
+@Composable
+private fun TrainingModeSelectorButton(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    activeColor: Color,
+    activeBorderColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(58.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) activeColor else Color(0xFF1A1019),
+        border = BorderStroke(
+            width = if (selected) 1.6.dp else 1.dp,
+            color = if (selected) activeBorderColor else WorkoutOutline
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (selected) WorkoutCreamText else FitTrackThemeExt.colors.mutedText,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (selected) WorkoutCreamText else Color.White.copy(alpha = 0.78f),
+                    maxLines = 1
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (selected) Color.White.copy(alpha = 0.85f) else FitTrackThemeExt.colors.mutedText,
+                    maxLines = 1
+                )
+            }
+        }
     }
 }
 
@@ -970,8 +1162,13 @@ private fun SevenDayVolumeProgressDialog(
                                     HorizontalDivider(color = Color.White.copy(alpha = 0.16f))
                                     groupedByExercise.forEach { (exerciseName, exSets) ->
                                         val workingSets = exSets.filter { !it.warmup }.ifEmpty { exSets }
+                                        val allBodyweight = workingSets.all { it.weightKg <= 0.01 }
                                         val setsLine = workingSets.joinToString(", ") { s ->
-                                            "${FitnessCalculations.formatWeight(s.weightKg, unitSystem, includeUnit = false)}×${s.reps}"
+                                            if (s.weightKg <= 0.01) {
+                                                "BW×${s.reps}"
+                                            } else {
+                                                "${FitnessCalculations.formatWeight(s.weightKg, unitSystem, includeUnit = false)}×${s.reps}"
+                                            }
                                         }
                                         Column {
                                             Text(
@@ -981,7 +1178,11 @@ private fun SevenDayVolumeProgressDialog(
                                                 color = WorkoutCreamText
                                             )
                                             Text(
-                                                text = "${workingSets.size} sets (${unitSystem.weightUnit}): $setsLine",
+                                                text = if (allBodyweight) {
+                                                    "${workingSets.size} sets (Bodyweight): $setsLine"
+                                                } else {
+                                                    "${workingSets.size} sets (${unitSystem.weightUnit}): $setsLine"
+                                                },
                                                 style = MonoMetricSmall,
                                                 color = Color.White.copy(alpha = 0.8f)
                                             )
@@ -1052,6 +1253,7 @@ private fun VolumeStat(label: String, value: String) {
 @Composable
 private fun CreateTemplateDialog(
     exercises: List<ExerciseEntity>,
+    isHomeMode: Boolean = false,
     onDismiss: () -> Unit,
     onSave: (String, String, List<TemplateExerciseSpec>) -> Unit
 ) {
@@ -1061,7 +1263,7 @@ private fun CreateTemplateDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New Workout Template") },
+        title = { Text(if (isHomeMode) "New Home Workout Template" else "New Gym Workout Template") },
         text = {
             Column(
                 modifier = Modifier
@@ -1072,7 +1274,7 @@ private fun CreateTemplateDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it.take(60) },
-                    label = { Text("Template Name (e.g., Upper Power)") },
+                    label = { Text(if (isHomeMode) "Template Name (e.g., Home Morning Burn)" else "Template Name (e.g., Upper Power)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1084,7 +1286,7 @@ private fun CreateTemplateDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text("Select Exercises (${selectedIds.size} chosen)", style = MaterialTheme.typography.labelLarge)
-                exercises.take(25).forEach { ex ->
+                exercises.take(40).forEach { ex ->
                     val checked = ex.id in selectedIds
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1099,7 +1301,7 @@ private fun CreateTemplateDialog(
                         Column {
                             Text(ex.name, style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                MuscleGroup.fromNameSafe(ex.muscleGroup).label,
+                                "${MuscleGroup.fromNameSafe(ex.muscleGroup).label} • ${ex.equipment}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = FitTrackThemeExt.colors.mutedText
                             )
@@ -1117,9 +1319,9 @@ private fun CreateTemplateDialog(
                             exerciseName = ex.name,
                             muscleGroup = ex.muscleGroup,
                             targetSets = 3,
-                            targetReps = 10,
-                            targetWeightKg = 20.0,
-                            restSeconds = 90
+                            targetReps = if (isHomeMode) 12 else 10,
+                            targetWeightKg = if (isHomeMode) 0.0 else 20.0,
+                            restSeconds = if (isHomeMode) 60 else 90
                         )
                     }
                     onSave(name, desc, specs)
@@ -1135,12 +1337,13 @@ private fun CreateTemplateDialog(
 
 @Composable
 private fun CreateCustomExerciseDialog(
+    defaultEquipment: String = "Dumbbell",
     onDismiss: () -> Unit,
     onSave: (String, String, String, String, String, String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var muscle by remember { mutableStateOf(MuscleGroup.CHEST) }
-    var equipment by remember { mutableStateOf("Dumbbell") }
+    var equipment by remember { mutableStateOf(defaultEquipment) }
     var instructions by remember { mutableStateOf("") }
 
     AlertDialog(
