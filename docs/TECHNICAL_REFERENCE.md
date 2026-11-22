@@ -81,16 +81,16 @@ This document is the complete, exact inventory of every module, file, design tok
 
 ## 3. Design System Pin-to-Pin
 
-### Per-Tab Animated 3D Color Palettes (`Color.kt` & `Theme.kt`)
-FitTrack transitions smoothly across all five sections (`animateColorAsState`, `380ms FastOutSlowInEasing`) while rendering layered 3D beveled cards (`FitTrackCard`), recessed 3D rings (`DailyScoreRing`, `Hydration3DRing`), and directional cross-tab `NavHost` slide/fade/scale transitions:
+### Per-Tab Dynamic 3D Color Palettes — 120Hz Optimized (`Color.kt` & `Theme.kt`)
+FitTrack achieves locked 120Hz tab switching by scoping cached immutable `ColorScheme` and `FitTrackExtendedColors` palettes directly inside each tab screen while animating only the outer shell & navigation bar chrome (`rememberAnimatedShellPalette`, `220ms FastOutSlowInEasing`) alongside lightweight GPU-accelerated horizontal slide + fade transitions (`200ms`). Non-clickable `FitTrackCard` surfaces skip press-animation allocations and cache gradient brushes:
 
 | Section | Primary + Secondary Palette | Mode & Key Accents |
 | :--- | :--- | :--- |
 | **Home** (`FitTrackSection.HOME`) | Deep Indigo `#252A5A` + Terracotta `#C66A4A` | Dark 3D theme, terracotta highlight & beveled indigo decks |
-| **Workout** (`FitTrackSection.WORKOUT`) | Crimson `#701A1F` + Royal Blue `#1E3A8A` | Exclusive to Workout & Active Workout; dual-tone crimson/blue 3D cards |
-| **Nutrition** (`FitTrackSection.NUTRITION`) | Botanical Lime `#C1E899` + Soft Sage `#E6F0DC` | Light botanical 3D mode with dark forest ink `#152913` & dark system bar icons |
+| **Workout** (`FitTrackSection.WORKOUT`) | Crimson `#701A1F` + Royal Blue `#1E3A8A` + Cream `#FFF5E1` titles | Exclusive to Workout & Active Workout; dual-tone crimson/blue 3D cards, Rest Timer pinned at top, Finish Workout docked at bottom, clickable 7-Day Volume daily workout breakdown |
+| **Nutrition** (`FitTrackSection.NUTRITION`) | Botanical Lime `#C1E899` + Soft Sage `#E6F0DC` | Light botanical 3D mode with dark forest ink `#152913`, high-contrast black Weekly toggle `#0E1410`, & dark system bar icons |
 | **Progress** (`FitTrackSection.PROGRESS`) | Warm Obsidian `#282623` + Stone Pewter `#898681` | Dark warm-stone 3D theme with interactive Bezier & 3D beveled charts |
-| **Profile** (`FitTrackSection.PROFILE`) | Deep Teal `#134E4A` + Warm Gold `#D4A373` | Dark teal & warm-gold 3D settings cards |
+| **Profile** (`FitTrackSection.PROFILE`) | Deep Teal `#134E4A` + Warm Gold `#D4A373` | Dark teal & warm-gold 3D settings cards with App Updates positioned above Cloud Sync & Privacy |
 
 ### Typography (`res/font/` & `Type.kt`)
 - **Headlines & Titles**: `Space Grotesk` (`res/font/space_grotesk.ttf`)

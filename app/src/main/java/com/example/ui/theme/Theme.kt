@@ -15,9 +15,9 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
@@ -56,7 +56,24 @@ data class FitTrackExtendedColors(
     val isLightTheme: Boolean = false
 )
 
-val LocalFitTrackColors = staticCompositionLocalOf { FitTrackExtendedColors() }
+/**
+ * Lightweight animated shell colors for the outer Scaffold background and
+ * NavigationBar / NavigationRail so switching tabs smoothly blends chrome
+ * colors at 120Hz without forcing 45+ theme token recompositions across screen content.
+ */
+@Immutable
+data class FitTrackShellPalette(
+    val background: Color,
+    val onSurface: Color,
+    val mutedText: Color,
+    val navBarContainer: Color,
+    val navIndicator: Color,
+    val navOnIndicator: Color,
+    val navTopHighlight: Color,
+    val isLightTheme: Boolean
+)
+
+val LocalFitTrackColors = compositionLocalOf { HomeExtendedColors }
 
 private val HomeColorScheme = darkColorScheme(
     primary = HomeTerracotta,
@@ -208,6 +225,126 @@ private val ProfileColorScheme = darkColorScheme(
     onErrorContainer = Crimson100
 )
 
+private val HomeExtendedColors = FitTrackExtendedColors(
+    success = Emerald500,
+    onSuccess = HomeBgDeep,
+    successContainer = Color(0xFF153B38),
+    onSuccessContainer = Emerald100,
+    warning = HomeTerracottaLight,
+    onWarning = HomeBgDeep,
+    warningContainer = HomeTerracottaContainer,
+    onWarningContainer = HomeOnTerracottaContainer,
+    surfaceElevated = HomeSurfaceVariant,
+    mutedText = HomeTextMuted,
+    cardioAccent = Cyan400,
+    volumeAccent = Color(0xFFA5B4FC),
+    hydrationAccent = Color(0xFF38BDF8),
+    cardSurfaceTop = HomeIndigoTop,
+    cardSurfaceBottom = HomeIndigoBottom,
+    cardTopHighlight = HomeBevelHighlight,
+    cardBottomShadow = HomeShadowLip,
+    navBarContainer = Color(0xFF1C2048),
+    navIndicator = HomeTerracotta,
+    navOnIndicator = Color.White,
+    isLightTheme = false
+)
+
+private val WorkoutExtendedColors = FitTrackExtendedColors(
+    success = Emerald500,
+    onSuccess = WorkoutBgDeep,
+    successContainer = Emerald900,
+    onSuccessContainer = Emerald100,
+    warning = Amber500,
+    onWarning = WorkoutBgDeep,
+    warningContainer = Amber900,
+    onWarningContainer = Amber100,
+    surfaceElevated = WorkoutSurfaceVariant,
+    mutedText = WorkoutTextMuted,
+    cardioAccent = WorkoutRoyalBlueGlow,
+    volumeAccent = WorkoutCrimsonGlow,
+    hydrationAccent = WorkoutRoyalBlueGlow,
+    cardSurfaceTop = WorkoutSurfaceTop,
+    cardSurfaceBottom = WorkoutSurfaceBottom,
+    cardTopHighlight = WorkoutBevelHighlight,
+    cardBottomShadow = WorkoutShadowLip,
+    navBarContainer = Color(0xFF1D0E17),
+    navIndicator = WorkoutCrimson,
+    navOnIndicator = Color.White,
+    isLightTheme = false
+)
+
+private val NutritionExtendedColors = FitTrackExtendedColors(
+    success = Emerald700,
+    onSuccess = Color.White,
+    successContainer = NutritionLime,
+    onSuccessContainer = NutritionForestDark,
+    warning = Amber700,
+    onWarning = Color.White,
+    warningContainer = Color(0xFFFEF3C7),
+    onWarningContainer = Color(0xFF78350F),
+    surfaceElevated = NutritionLime,
+    mutedText = NutritionForestMuted,
+    cardioAccent = NutritionAqua,
+    volumeAccent = NutritionForestPrimary,
+    hydrationAccent = NutritionAqua,
+    cardSurfaceTop = NutritionCardTop,
+    cardSurfaceBottom = NutritionCardBottom,
+    cardTopHighlight = NutritionBevelHighlight,
+    cardBottomShadow = NutritionShadowLip,
+    navBarContainer = Color(0xFFDAE8CC),
+    navIndicator = NutritionLime,
+    navOnIndicator = NutritionForestDark,
+    isLightTheme = true
+)
+
+private val ProgressExtendedColors = FitTrackExtendedColors(
+    success = Color(0xFF4ADE80),
+    onSuccess = ProgressBgDeep,
+    successContainer = Color(0xFF1F3526),
+    onSuccessContainer = Emerald100,
+    warning = Color(0xFFFBBF24),
+    onWarning = ProgressBgDeep,
+    warningContainer = Color(0xFF3E3018),
+    onWarningContainer = Amber100,
+    surfaceElevated = ProgressSurfaceVariant,
+    mutedText = ProgressTextMuted,
+    cardioAccent = Color(0xFF38BDF8),
+    volumeAccent = Color(0xFFD6B98C),
+    hydrationAccent = Color(0xFF38BDF8),
+    cardSurfaceTop = ProgressCardTop,
+    cardSurfaceBottom = ProgressCardBottom,
+    cardTopHighlight = ProgressBevelHighlight,
+    cardBottomShadow = ProgressShadowLip,
+    navBarContainer = Color(0xFF211F1D),
+    navIndicator = ProgressStone,
+    navOnIndicator = ProgressBgDeep,
+    isLightTheme = false
+)
+
+private val ProfileExtendedColors = FitTrackExtendedColors(
+    success = ProfileSeafoam,
+    onSuccess = ProfileBgDeep,
+    successContainer = Color(0xFF0E3D3A),
+    onSuccessContainer = ProfileTextPrimary,
+    warning = ProfileGold,
+    onWarning = ProfileBgDeep,
+    warningContainer = ProfileGoldContainer,
+    onWarningContainer = ProfileOnGoldContainer,
+    surfaceElevated = ProfileSurfaceVariant,
+    mutedText = ProfileTextMuted,
+    cardioAccent = ProfileSeafoam,
+    volumeAccent = ProfileGold,
+    hydrationAccent = ProfileSeafoam,
+    cardSurfaceTop = ProfileCardTop,
+    cardSurfaceBottom = ProfileCardBottom,
+    cardTopHighlight = ProfileBevelHighlight,
+    cardBottomShadow = ProfileShadowLip,
+    navBarContainer = Color(0xFF0E3B38),
+    navIndicator = ProfileGold,
+    navOnIndicator = ProgressBgDeep,
+    isLightTheme = false
+)
+
 private fun targetColorScheme(section: FitTrackSection): ColorScheme = when (section) {
     FitTrackSection.HOME -> HomeColorScheme
     FitTrackSection.WORKOUT -> WorkoutColorScheme
@@ -217,135 +354,53 @@ private fun targetColorScheme(section: FitTrackSection): ColorScheme = when (sec
 }
 
 private fun targetExtendedColors(section: FitTrackSection): FitTrackExtendedColors = when (section) {
-    FitTrackSection.HOME -> FitTrackExtendedColors(
-        success = Emerald500,
-        onSuccess = HomeBgDeep,
-        successContainer = Color(0xFF153B38),
-        onSuccessContainer = Emerald100,
-        warning = HomeTerracottaLight,
-        onWarning = HomeBgDeep,
-        warningContainer = HomeTerracottaContainer,
-        onWarningContainer = HomeOnTerracottaContainer,
-        surfaceElevated = HomeSurfaceVariant,
-        mutedText = HomeTextMuted,
-        cardioAccent = Cyan400,
-        volumeAccent = Color(0xFFA5B4FC),
-        hydrationAccent = Color(0xFF38BDF8),
-        cardSurfaceTop = HomeIndigoTop,
-        cardSurfaceBottom = HomeIndigoBottom,
-        cardTopHighlight = HomeBevelHighlight,
-        cardBottomShadow = HomeShadowLip,
-        navBarContainer = Color(0xFF1C2048),
-        navIndicator = HomeTerracotta,
-        navOnIndicator = Color.White,
-        isLightTheme = false
-    )
+    FitTrackSection.HOME -> HomeExtendedColors
+    FitTrackSection.WORKOUT -> WorkoutExtendedColors
+    FitTrackSection.NUTRITION -> NutritionExtendedColors
+    FitTrackSection.PROGRESS -> ProgressExtendedColors
+    FitTrackSection.PROFILE -> ProfileExtendedColors
+}
 
-    FitTrackSection.WORKOUT -> FitTrackExtendedColors(
-        success = Emerald500,
-        onSuccess = WorkoutBgDeep,
-        successContainer = Emerald900,
-        onSuccessContainer = Emerald100,
-        warning = Amber500,
-        onWarning = WorkoutBgDeep,
-        warningContainer = Amber900,
-        onWarningContainer = Amber100,
-        surfaceElevated = WorkoutSurfaceVariant,
-        mutedText = WorkoutTextMuted,
-        cardioAccent = WorkoutRoyalBlueGlow,
-        volumeAccent = WorkoutCrimsonGlow,
-        hydrationAccent = WorkoutRoyalBlueGlow,
-        cardSurfaceTop = WorkoutSurfaceTop,
-        cardSurfaceBottom = WorkoutSurfaceBottom,
-        cardTopHighlight = WorkoutBevelHighlight,
-        cardBottomShadow = WorkoutShadowLip,
-        navBarContainer = Color(0xFF1D0E17),
-        navIndicator = WorkoutCrimson,
-        navOnIndicator = Color.White,
-        isLightTheme = false
-    )
+private val ShellAnimSpec = tween<Color>(durationMillis = 220, easing = FastOutSlowInEasing)
 
-    FitTrackSection.NUTRITION -> FitTrackExtendedColors(
-        success = Emerald700,
-        onSuccess = Color.White,
-        successContainer = NutritionLime,
-        onSuccessContainer = NutritionForestDark,
-        warning = Amber700,
-        onWarning = Color.White,
-        warningContainer = Color(0xFFFEF3C7),
-        onWarningContainer = Color(0xFF78350F),
-        surfaceElevated = NutritionLime,
-        mutedText = NutritionForestMuted,
-        cardioAccent = NutritionAqua,
-        volumeAccent = NutritionForestPrimary,
-        hydrationAccent = NutritionAqua,
-        cardSurfaceTop = NutritionCardTop,
-        cardSurfaceBottom = NutritionCardBottom,
-        cardTopHighlight = NutritionBevelHighlight,
-        cardBottomShadow = NutritionShadowLip,
-        navBarContainer = Color(0xFFDAE8CC),
-        navIndicator = NutritionLime,
-        navOnIndicator = NutritionForestDark,
-        isLightTheme = true
-    )
+@Composable
+fun rememberAnimatedShellPalette(section: FitTrackSection): FitTrackShellPalette {
+    val scheme = targetColorScheme(section)
+    val ext = targetExtendedColors(section)
 
-    FitTrackSection.PROGRESS -> FitTrackExtendedColors(
-        success = Color(0xFF4ADE80),
-        onSuccess = ProgressBgDeep,
-        successContainer = Color(0xFF1F3526),
-        onSuccessContainer = Emerald100,
-        warning = Color(0xFFFBBF24),
-        onWarning = ProgressBgDeep,
-        warningContainer = Color(0xFF3E3018),
-        onWarningContainer = Amber100,
-        surfaceElevated = ProgressSurfaceVariant,
-        mutedText = ProgressTextMuted,
-        cardioAccent = Color(0xFF38BDF8),
-        volumeAccent = Color(0xFFD6B98C),
-        hydrationAccent = Color(0xFF38BDF8),
-        cardSurfaceTop = ProgressCardTop,
-        cardSurfaceBottom = ProgressCardBottom,
-        cardTopHighlight = ProgressBevelHighlight,
-        cardBottomShadow = ProgressShadowLip,
-        navBarContainer = Color(0xFF211F1D),
-        navIndicator = ProgressStone,
-        navOnIndicator = ProgressBgDeep,
-        isLightTheme = false
-    )
+    val background by animateColorAsState(scheme.background, ShellAnimSpec, label = "shellBg")
+    val onSurface by animateColorAsState(scheme.onSurface, ShellAnimSpec, label = "shellOnSurface")
+    val mutedText by animateColorAsState(ext.mutedText, ShellAnimSpec, label = "shellMuted")
+    val navBarContainer by animateColorAsState(ext.navBarContainer, ShellAnimSpec, label = "shellNavBg")
+    val navIndicator by animateColorAsState(ext.navIndicator, ShellAnimSpec, label = "shellNavInd")
+    val navOnIndicator by animateColorAsState(ext.navOnIndicator, ShellAnimSpec, label = "shellNavOnInd")
+    val navTopHighlight by animateColorAsState(ext.cardTopHighlight, ShellAnimSpec, label = "shellNavHi")
 
-    FitTrackSection.PROFILE -> FitTrackExtendedColors(
-        success = ProfileSeafoam,
-        onSuccess = ProfileBgDeep,
-        successContainer = Color(0xFF0E3D3A),
-        onSuccessContainer = ProfileTextPrimary,
-        warning = ProfileGold,
-        onWarning = ProfileBgDeep,
-        warningContainer = ProfileGoldContainer,
-        onWarningContainer = ProfileOnGoldContainer,
-        surfaceElevated = ProfileSurfaceVariant,
-        mutedText = ProfileTextMuted,
-        cardioAccent = ProfileSeafoam,
-        volumeAccent = ProfileGold,
-        hydrationAccent = ProfileSeafoam,
-        cardSurfaceTop = ProfileCardTop,
-        cardSurfaceBottom = ProfileCardBottom,
-        cardTopHighlight = ProfileBevelHighlight,
-        cardBottomShadow = ProfileShadowLip,
-        navBarContainer = Color(0xFF0E3B38),
-        navIndicator = ProfileGold,
-        navOnIndicator = ProgressBgDeep,
-        isLightTheme = false
+    ApplySystemBarTheme(isLightTheme = ext.isLightTheme)
+
+    return FitTrackShellPalette(
+        background = background,
+        onSurface = onSurface,
+        mutedText = mutedText,
+        navBarContainer = navBarContainer,
+        navIndicator = navIndicator,
+        navOnIndicator = navOnIndicator,
+        navTopHighlight = navTopHighlight,
+        isLightTheme = ext.isLightTheme
     )
 }
 
 @Composable
-private fun animColor(target: Color, label: String): Color {
-    val color by animateColorAsState(
-        targetValue = target,
-        animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing),
-        label = label
-    )
-    return color
+private fun ApplySystemBarTheme(isLightTheme: Boolean) {
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        LaunchedEffect(view, isLightTheme) {
+            val window = view.context.findActivity()?.window ?: return@LaunchedEffect
+            val insetsController = WindowCompat.getInsetsController(window, view)
+            insetsController.isAppearanceLightStatusBars = isLightTheme
+            insetsController.isAppearanceLightNavigationBars = isLightTheme
+        }
+    }
 }
 
 private val FitTrackShapes = Shapes(
@@ -356,82 +411,27 @@ private val FitTrackShapes = Shapes(
     extraLarge = RoundedCornerShape(26.dp)
 )
 
+/**
+ * High-performance 120Hz theme provider. Uses cached immutable ColorScheme &
+ * FitTrackExtendedColors instances so tab pages render with zero per-frame
+ * recomposition storms during cross-tab transitions.
+ */
 @Composable
 fun FitTrackTheme(
     section: FitTrackSection = FitTrackSection.HOME,
+    applySystemBars: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val targetScheme = targetColorScheme(section)
-    val targetExt = targetExtendedColors(section)
+    val scheme = targetColorScheme(section)
+    val ext = targetExtendedColors(section)
 
-    val animatedScheme = targetScheme.copy(
-        primary = animColor(targetScheme.primary, "primary"),
-        onPrimary = animColor(targetScheme.onPrimary, "onPrimary"),
-        primaryContainer = animColor(targetScheme.primaryContainer, "primaryContainer"),
-        onPrimaryContainer = animColor(targetScheme.onPrimaryContainer, "onPrimaryContainer"),
-        secondary = animColor(targetScheme.secondary, "secondary"),
-        onSecondary = animColor(targetScheme.onSecondary, "onSecondary"),
-        secondaryContainer = animColor(targetScheme.secondaryContainer, "secondaryContainer"),
-        onSecondaryContainer = animColor(targetScheme.onSecondaryContainer, "onSecondaryContainer"),
-        tertiary = animColor(targetScheme.tertiary, "tertiary"),
-        onTertiary = animColor(targetScheme.onTertiary, "onTertiary"),
-        background = animColor(targetScheme.background, "background"),
-        onBackground = animColor(targetScheme.onBackground, "onBackground"),
-        surface = animColor(targetScheme.surface, "surface"),
-        onSurface = animColor(targetScheme.onSurface, "onSurface"),
-        surfaceVariant = animColor(targetScheme.surfaceVariant, "surfaceVariant"),
-        onSurfaceVariant = animColor(targetScheme.onSurfaceVariant, "onSurfaceVariant"),
-        surfaceContainerLowest = animColor(targetScheme.surfaceContainerLowest, "surfaceContainerLowest"),
-        surfaceContainerLow = animColor(targetScheme.surfaceContainerLow, "surfaceContainerLow"),
-        surfaceContainer = animColor(targetScheme.surfaceContainer, "surfaceContainer"),
-        surfaceContainerHigh = animColor(targetScheme.surfaceContainerHigh, "surfaceContainerHigh"),
-        surfaceContainerHighest = animColor(targetScheme.surfaceContainerHighest, "surfaceContainerHighest"),
-        outline = animColor(targetScheme.outline, "outline"),
-        outlineVariant = animColor(targetScheme.outlineVariant, "outlineVariant"),
-        error = animColor(targetScheme.error, "error"),
-        onError = animColor(targetScheme.onError, "onError"),
-        errorContainer = animColor(targetScheme.errorContainer, "errorContainer"),
-        onErrorContainer = animColor(targetScheme.onErrorContainer, "onErrorContainer")
-    )
-
-    val animatedExt = FitTrackExtendedColors(
-        success = animColor(targetExt.success, "success"),
-        onSuccess = animColor(targetExt.onSuccess, "onSuccess"),
-        successContainer = animColor(targetExt.successContainer, "successContainer"),
-        onSuccessContainer = animColor(targetExt.onSuccessContainer, "onSuccessContainer"),
-        warning = animColor(targetExt.warning, "warning"),
-        onWarning = animColor(targetExt.onWarning, "onWarning"),
-        warningContainer = animColor(targetExt.warningContainer, "warningContainer"),
-        onWarningContainer = animColor(targetExt.onWarningContainer, "onWarningContainer"),
-        surfaceElevated = animColor(targetExt.surfaceElevated, "surfaceElevated"),
-        mutedText = animColor(targetExt.mutedText, "mutedText"),
-        cardioAccent = animColor(targetExt.cardioAccent, "cardioAccent"),
-        volumeAccent = animColor(targetExt.volumeAccent, "volumeAccent"),
-        hydrationAccent = animColor(targetExt.hydrationAccent, "hydrationAccent"),
-        cardSurfaceTop = animColor(targetExt.cardSurfaceTop, "cardSurfaceTop"),
-        cardSurfaceBottom = animColor(targetExt.cardSurfaceBottom, "cardSurfaceBottom"),
-        cardTopHighlight = animColor(targetExt.cardTopHighlight, "cardTopHighlight"),
-        cardBottomShadow = animColor(targetExt.cardBottomShadow, "cardBottomShadow"),
-        navBarContainer = animColor(targetExt.navBarContainer, "navBarContainer"),
-        navIndicator = animColor(targetExt.navIndicator, "navIndicator"),
-        navOnIndicator = animColor(targetExt.navOnIndicator, "navOnIndicator"),
-        isLightTheme = targetExt.isLightTheme
-    )
-
-    val view = LocalView.current
-    if (!view.isInEditMode) {
-        val isLight = targetExt.isLightTheme
-        SideEffect {
-            val window = view.context.findActivity()?.window ?: return@SideEffect
-            val insetsController = WindowCompat.getInsetsController(window, view)
-            insetsController.isAppearanceLightStatusBars = isLight
-            insetsController.isAppearanceLightNavigationBars = isLight
-        }
+    if (applySystemBars) {
+        ApplySystemBarTheme(isLightTheme = ext.isLightTheme)
     }
 
-    CompositionLocalProvider(LocalFitTrackColors provides animatedExt) {
+    CompositionLocalProvider(LocalFitTrackColors provides ext) {
         MaterialTheme(
-            colorScheme = animatedScheme,
+            colorScheme = scheme,
             typography = FitTrackTypography,
             shapes = FitTrackShapes,
             content = content

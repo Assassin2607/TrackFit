@@ -38,6 +38,7 @@ val WorkoutOutline = Color(0xFF5D2634)
 val WorkoutBevelHighlight = Color(0xFF9A333C)
 val WorkoutShadowLip = Color(0xFF090407)
 val WorkoutTextPrimary = Color(0xFFFAF5F6)
+val WorkoutCreamText = Color(0xFFFFF5E1)
 val WorkoutTextSecondary = Color(0xFFE5D4D8)
 val WorkoutTextMuted = Color(0xFFC2ABB3)
 
@@ -60,6 +61,7 @@ val NutritionShadowLip = Color(0xFFB3CA9D)
 val NutritionAqua = Color(0xFF0891B2)
 val NutritionAquaContainer = Color(0xFFD6F1F7)
 val NutritionOnAquaContainer = Color(0xFF0C4A5E)
+val NutritionToggleBlack = Color(0xFF0E1410)
 
 // ============================================================================
 // 4. PROGRESS PALETTE — Warm Obsidian (#282623) + Stone Pewter (#898681)

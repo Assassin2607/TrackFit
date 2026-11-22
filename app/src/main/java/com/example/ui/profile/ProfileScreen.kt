@@ -216,66 +216,7 @@ fun ProfileScreen(
             }
         }
 
-        // Offline Sync & Data Privacy Controls
-        item {
-            FitTrackCard {
-                Text("Cloud Sync & Privacy", style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = onManualSync,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Rounded.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Sync Now (${state.pendingSyncCount} pending)")
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = {
-                        onExportData { json ->
-                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_SUBJECT, "FitTrack Data Export")
-                                putExtra(Intent.EXTRA_TEXT, json)
-                            }
-                            context.startActivity(Intent.createChooser(shareIntent, "Export FitTrack JSON"))
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("export_data_button")
-                ) {
-                    Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Export My Data (JSON)")
-                }
-                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = onClearWorkouts,
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Clear Workouts", style = MaterialTheme.typography.labelSmall) }
-                    OutlinedButton(
-                        onClick = onClearFoods,
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Clear Food Logs", style = MaterialTheme.typography.labelSmall) }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = { showDeleteAccountDialog = true },
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("delete_account_button")
-                ) {
-                    Icon(Icons.Rounded.DeleteForever, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Delete All Data & Account")
-                }
-            }
-        }
-
-        // App Updates
+        // App Updates (above Cloud Sync & Privacy)
         item {
             val canCheckUpdates = bundledUpdateSourceConfigured || state.preferences.githubRepo.isNotBlank()
             FitTrackCard(modifier = Modifier.testTag("app_updates_card")) {
@@ -430,6 +371,65 @@ fun ProfileScreen(
                         )
                     }
                     AppUpdateStatus.Idle -> Unit
+                }
+            }
+        }
+
+        // Offline Sync & Data Privacy Controls
+        item {
+            FitTrackCard {
+                Text("Cloud Sync & Privacy", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onManualSync,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Rounded.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Sync Now (${state.pendingSyncCount} pending)")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        onExportData { json ->
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT, "FitTrack Data Export")
+                                putExtra(Intent.EXTRA_TEXT, json)
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "Export FitTrack JSON"))
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("export_data_button")
+                ) {
+                    Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Export My Data (JSON)")
+                }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = onClearWorkouts,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Clear Workouts", style = MaterialTheme.typography.labelSmall) }
+                    OutlinedButton(
+                        onClick = onClearFoods,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Clear Food Logs", style = MaterialTheme.typography.labelSmall) }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { showDeleteAccountDialog = true },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("delete_account_button")
+                ) {
+                    Icon(Icons.Rounded.DeleteForever, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Delete All Data & Account")
                 }
             }
         }

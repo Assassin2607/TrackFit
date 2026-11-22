@@ -74,9 +74,11 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
+private val CardShape20 = RoundedCornerShape(20.dp)
+
 /**
  * Layered 3D depth card with recessed base plate shadow, diagonal sheen gradient,
- * top-edge specular bevel highlight, and subtle tactile press depth.
+ * top-edge specular bevel highlight, and subtle tactile press depth (120Hz-optimized).
  */
 @Composable
 fun FitTrackCard(
@@ -89,20 +91,7 @@ fun FitTrackCard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val ext = FitTrackThemeExt.colors
-    val shape = RoundedCornerShape(20.dp)
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed && onClick != null) 0.985f else 1f,
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = 500f),
-        label = "card3dPressScale"
-    )
-    val pressOffsetPx by animateFloatAsState(
-        targetValue = if (isPressed && onClick != null) 2f else 0f,
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = 500f),
-        label = "card3dPressOffset"
-    )
+    val outlineColor = MaterialTheme.colorScheme.outline
 
     val topSurface = if (containerColor != Color.Unspecified) containerColor else ext.cardSurfaceTop
     val bottomSurface = when {
@@ -123,15 +112,51 @@ fun FitTrackCard(
     val shadowPlateColor = ext.cardBottomShadow.copy(alpha = if (ext.isLightTheme) 0.45f else 0.78f)
     val ambientGlowColor = ext.cardBottomShadow.copy(alpha = if (ext.isLightTheme) 0.22f else 0.42f)
 
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(bottom = depthElevation)
+    val surfaceBrush = remember(topSurface, bottomSurface) {
+        Brush.linearGradient(
+            colors = listOf(topSurface, bottomSurface),
+            start = Offset(0f, 0f),
+            end = Offset(900f, 900f)
+        )
+    }
+    val borderBrush = remember(topBevel, outlineColor, bottomBevel) {
+        Brush.verticalGradient(
+            colors = listOf(topBevel, outlineColor.copy(alpha = 0.45f), bottomBevel)
+        )
+    }
+
+    val interactiveModifier = if (onClick != null) {
+        val interactionSource = remember { MutableInteractionSource() }
+        val isPressed by interactionSource.collectIsPressedAsState()
+        val scale by animateFloatAsState(
+            targetValue = if (isPressed) 0.985f else 1f,
+            animationSpec = spring(dampingRatio = 0.75f, stiffness = 650f),
+            label = "card3dPressScale"
+        )
+        val pressOffsetPx by animateFloatAsState(
+            targetValue = if (isPressed) 2f else 0f,
+            animationSpec = spring(dampingRatio = 0.75f, stiffness = 650f),
+            label = "card3dPressOffset"
+        )
+        Modifier
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
                 translationY = pressOffsetPx
             }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = androidx.compose.material3.ripple(),
+                onClick = onClick
+            )
+    } else {
+        Modifier
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = depthElevation)
             .drawBehind {
                 val radiusPx = 20.dp.toPx()
                 val lipPx = depthElevation.toPx()
@@ -150,30 +175,14 @@ fun FitTrackCard(
                     cornerRadius = CornerRadius(radiusPx, radiusPx)
                 )
             }
-            .clip(shape)
-            .background(
-                brush = Brush.linearGradient(
-                    colors = listOf(topSurface, bottomSurface),
-                    start = Offset(0f, 0f),
-                    end = Offset(900f, 900f)
-                )
-            )
+            .clip(CardShape20)
+            .background(brush = surfaceBrush)
             .border(
                 width = 1.15.dp,
-                brush = Brush.verticalGradient(
-                    colors = listOf(topBevel, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f), bottomBevel)
-                ),
-                shape = shape
+                brush = borderBrush,
+                shape = CardShape20
             )
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable(
-                        interactionSource = interactionSource,
-                        indication = androidx.compose.material3.ripple(),
-                        onClick = onClick
-                    )
-                } else Modifier
-            )
+            .then(interactiveModifier)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),

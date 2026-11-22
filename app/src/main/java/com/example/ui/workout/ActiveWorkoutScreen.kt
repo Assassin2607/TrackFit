@@ -61,6 +61,7 @@ import com.example.ui.components.FitTrackCard
 import com.example.ui.theme.FitTrackThemeExt
 import com.example.ui.theme.MonoMetricMedium
 import com.example.ui.theme.MonoMetricSmall
+import com.example.ui.theme.WorkoutCreamText
 import com.example.viewmodel.ActiveSetDraft
 import com.example.viewmodel.ActiveWorkoutState
 import com.example.viewmodel.RestTimerState
@@ -99,7 +100,7 @@ fun ActiveWorkoutScreen(
             .navigationBarsPadding()
             .testTag("active_workout_screen")
     ) {
-        // Top Action Bar
+        // Top Bar: Close + Workout Title (Cream) + Live Stats (no Finish button at top)
         Surface(
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
@@ -107,34 +108,29 @@ fun ActiveWorkoutScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                    IconButton(onClick = { showDiscardDialog = true }) {
-                        Icon(Icons.Rounded.Close, contentDescription = "Cancel workout")
-                    }
-                    Column {
-                        Text(session.templateName, style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            text = "$completedSetsCount sets • Vol ${FitnessCalculations.formatVolume(liveVolumeKg, unitSystem)}",
-                            style = MonoMetricSmall,
-                            color = FitTrackThemeExt.colors.success
-                        )
-                    }
+                IconButton(onClick = { showDiscardDialog = true }) {
+                    Icon(Icons.Rounded.Close, contentDescription = "Cancel workout")
                 }
-                Button(
-                    onClick = onFinishWorkout,
-                    colors = ButtonDefaults.buttonColors(containerColor = FitTrackThemeExt.colors.success, contentColor = FitTrackThemeExt.colors.onSuccess),
-                    modifier = Modifier.testTag("finish_workout_button")
-                ) {
-                    Text("Finish", fontWeight = FontWeight.Bold)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = session.templateName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = WorkoutCreamText
+                    )
+                    Text(
+                        text = "$completedSetsCount sets • Vol ${FitnessCalculations.formatVolume(liveVolumeKg, unitSystem)}",
+                        style = MonoMetricSmall,
+                        color = FitTrackThemeExt.colors.success
+                    )
                 }
             }
         }
 
-        // Persistent Rest Timer Dock (stays live while navigating exercises)
+        // Rest Timer Dock pinned exclusively at the top
         RestTimerDock(
             timer = restTimer,
             onStartPreset = onStartRestTimer,
@@ -260,6 +256,42 @@ fun ActiveWorkoutScreen(
                     label = { Text("Workout Notes (energy, cues, soreness)") },
                     modifier = Modifier.fillMaxWidth()
                 )
+            }
+            item { Spacer(modifier = Modifier.height(8.dp)) }
+        }
+
+        // Bottom Docked Finish Action Bar
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Button(
+                    onClick = onFinishWorkout,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = FitTrackThemeExt.colors.success,
+                        contentColor = FitTrackThemeExt.colors.onSuccess
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .testTag("finish_workout_button")
+                ) {
+                    Icon(Icons.Rounded.Check, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (completedSetsCount > 0) "Finish Workout ($completedSetsCount sets)" else "Finish Workout",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }

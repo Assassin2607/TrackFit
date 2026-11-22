@@ -51,6 +51,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -89,6 +90,7 @@ import com.example.ui.theme.NutritionAqua
 import com.example.ui.theme.NutritionForestDark
 import com.example.ui.theme.NutritionLime
 import com.example.ui.theme.NutritionSageBg
+import com.example.ui.theme.NutritionToggleBlack
 import com.example.viewmodel.FitTrackUiState
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -158,11 +160,24 @@ fun NutritionScreen(
                     )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Weekly", style = MaterialTheme.typography.labelMedium, color = ext.mutedText)
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Weekly",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = NutritionToggleBlack
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Switch(
                         checked = showWeeklyBudget,
                         onCheckedChange = { showWeeklyBudget = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = NutritionToggleBlack,
+                            checkedBorderColor = NutritionToggleBlack,
+                            uncheckedThumbColor = NutritionToggleBlack,
+                            uncheckedTrackColor = NutritionToggleBlack.copy(alpha = 0.14f),
+                            uncheckedBorderColor = NutritionToggleBlack
+                        ),
                         modifier = Modifier.testTag("weekly_budget_toggle")
                     )
                 }

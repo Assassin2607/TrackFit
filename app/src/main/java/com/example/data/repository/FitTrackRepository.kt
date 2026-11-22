@@ -296,12 +296,115 @@ class FitTrackRepository(
         localDb.workoutSessionDao().upsertSession(session)
         localDb.workoutSessionDao().upsertSets(sets)
         enqueueAndSync(session.userId, FirestoreSyncManager.COLLECTION_WORKOUTS, session.id)
+        syncTemplatesFromRemainingHistory(
+            userId = session.userId,
+            affectedTemplateId = session.templateId,
+            affectedExerciseIds = sets.map { it.exerciseId }.toSet()
+        )
     }
 
     suspend fun deleteWorkoutSession(userId: String, sessionId: String) {
+        val deletedSession = localDb.workoutSessionDao().getSessionById(userId, sessionId)
+        val deletedSets = localDb.workoutSessionDao().getSetsForSession(userId, sessionId)
         localDb.workoutSessionDao().deleteSetsForSession(userId, sessionId)
         localDb.workoutSessionDao().deleteSession(userId, sessionId)
         enqueueAndSync(userId, FirestoreSyncManager.COLLECTION_WORKOUTS, sessionId, FirestoreSyncManager.ACTION_DELETE)
+        syncTemplatesFromRemainingHistory(
+            userId = userId,
+            affectedTemplateId = deletedSession?.templateId,
+            affectedExerciseIds = deletedSets.map { it.exerciseId }.toSet()
+        )
+    }
+
+    /**
+     * Keeps saved Workout Templates aligned with the latest remaining workout history.
+     * When a workout is logged or deleted from History, each affected template's
+     * exercise targets (sets, reps, weight) update to reflect the newest remaining
+     * session for each exercise, or revert to starter defaults if none remain.
+     */
+    private suspend fun syncTemplatesFromRemainingHistory(
+        userId: String,
+        affectedTemplateId: String?,
+        affectedExerciseIds: Set<String>
+    ) {
+        val templates = localDb.workoutTemplateDao().observeTemplates(userId).first()
+        if (templates.isEmpty()) return
+
+        val remainingSessions = localDb.workoutSessionDao().observeSessions(userId).first()
+        val validSessionIds = remainingSessions.map { it.id }.toSet()
+        val remainingSets = localDb.workoutSessionDao().observeAllSets(userId).first()
+            .filter { it.completed && !it.warmup && it.workoutSessionId in validSessionIds }
+
+        val profileSplit = WorkoutSplit.fromNameSafe(localDb.userProfileDao().getProfile(userId)?.preferredSplit)
+        val starterDefaultsByExerciseId = buildMap<String, TemplateExerciseSpec> {
+            (listOf(profileSplit) + WorkoutSplit.entries).distinct().forEach { split ->
+                SeedExerciseCatalog.createStarterTemplates(userId, split).forEach { tpl ->
+                    SeedSerialization.decodeTemplateExercises(tpl.exercisesJson).forEach { spec ->
+                        putIfAbsent(spec.exerciseId, spec)
+                    }
+                }
+            }
+        }
+
+        val now = System.currentTimeMillis()
+        var anyUpdated = false
+
+        templates.forEach { template ->
+            val currentSpecs = SeedSerialization.decodeTemplateExercises(template.exercisesJson)
+            val isAffected = (affectedTemplateId != null && template.id == affectedTemplateId) ||
+                affectedExerciseIds.isEmpty() ||
+                currentSpecs.any { it.exerciseId in affectedExerciseIds }
+
+            if (!isAffected) return@forEach
+
+            val updatedSpecs = currentSpecs.map { spec ->
+                val setsForExercise = remainingSets.filter { it.exerciseId == spec.exerciseId }
+                val latestSessionId = setsForExercise.maxByOrNull { it.recordedAtEpochMs }?.workoutSessionId
+                if (latestSessionId != null) {
+                    val latestSets = setsForExercise
+                        .filter { it.workoutSessionId == latestSessionId }
+                        .sortedBy { it.setNumber }
+                    val repRepresentative = latestSets.firstOrNull()?.reps ?: spec.targetReps
+                    val weightRepresentative = latestSets.maxOfOrNull { it.weightKg } ?: spec.targetWeightKg
+                    spec.copy(
+                        targetSets = latestSets.size.coerceIn(1, 10),
+                        targetReps = repRepresentative.coerceIn(1, 50),
+                        targetWeightKg = weightRepresentative.coerceAtLeast(0.0)
+                    )
+                } else {
+                    val starter = starterDefaultsByExerciseId[spec.exerciseId]
+                    spec.copy(
+                        targetSets = starter?.targetSets ?: 3,
+                        targetReps = starter?.targetReps ?: 10,
+                        targetWeightKg = starter?.targetWeightKg ?: 20.0
+                    )
+                }
+            }
+
+            val updatedJson = SeedSerialization.encodeTemplateExercises(updatedSpecs)
+            if (updatedJson != template.exercisesJson) {
+                localDb.workoutTemplateDao().upsert(
+                    template.copy(
+                        exercisesJson = updatedJson,
+                        updatedAtEpochMs = now
+                    )
+                )
+                localDb.syncQueueDao().enqueue(
+                    SyncQueueEntity(
+                        "$userId:${FirestoreSyncManager.COLLECTION_TEMPLATES}:${template.id}",
+                        userId,
+                        FirestoreSyncManager.COLLECTION_TEMPLATES,
+                        template.id,
+                        FirestoreSyncManager.ACTION_UPSERT
+                    )
+                )
+                anyUpdated = true
+            }
+        }
+
+        if (anyUpdated) {
+            syncManager.flushQueue(userId)
+        }
     }
 
     suspend fun logCardioSession(session: CardioSessionEntity) {
@@ -640,6 +743,7 @@ class FitTrackRepository(
         }
         localDb.workoutSessionDao().deleteSetsForUser(userId)
         localDb.workoutSessionDao().deleteSessionsForUser(userId)
+        syncTemplatesFromRemainingHistory(userId, affectedTemplateId = null, affectedExerciseIds = emptySet())
         syncManager.flushQueue(userId)
     }
 

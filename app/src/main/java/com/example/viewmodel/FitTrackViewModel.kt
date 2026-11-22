@@ -743,8 +743,9 @@ class FitTrackViewModel(
         val state = uiState.value
         val unitSystem = state.preferences.unitSystem
 
+        val validSessionIds = state.workoutSessions.map { it.id }.toSet()
         val exercises = specs.map { spec ->
-            val prevSets = findLastSessionSetsForExercise(spec.exerciseId, state.allWorkoutSets)
+            val prevSets = findLastSessionSetsForExercise(spec.exerciseId, state.allWorkoutSets, validSessionIds)
             val prevSummary = prevSets.map { s ->
                 "${FitnessCalculations.formatWeight(s.weightKg, unitSystem)} × ${s.reps}"
             }
@@ -792,9 +793,12 @@ class FitTrackViewModel(
 
     private fun findLastSessionSetsForExercise(
         exerciseId: String,
-        allSets: List<WorkoutSetEntity>
+        allSets: List<WorkoutSetEntity>,
+        validSessionIds: Set<String>
     ): List<WorkoutSetEntity> {
-        val forExercise = allSets.filter { it.exerciseId == exerciseId && it.completed }
+        val forExercise = allSets.filter {
+            it.exerciseId == exerciseId && it.completed && it.workoutSessionId in validSessionIds
+        }
         val latestSessionId = forExercise.maxByOrNull { it.recordedAtEpochMs }?.workoutSessionId ?: return emptyList()
         return forExercise
             .filter { it.workoutSessionId == latestSessionId }

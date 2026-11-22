@@ -2,6 +2,7 @@ package com.example.ui.workout
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -62,26 +64,37 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.TextButton
 import com.example.data.local.CardioSessionEntity
 import com.example.data.local.ExerciseEntity
+import com.example.data.local.WorkoutSessionEntity
+import com.example.data.local.WorkoutSetEntity
 import com.example.data.local.WorkoutTemplateEntity
 import com.example.data.seed.SeedSerialization
 import com.example.data.seed.TemplateExerciseSpec
 import com.example.domain.calc.FitnessCalculations
 import com.example.domain.model.CardioActivityType
 import com.example.domain.model.MuscleGroup
+import com.example.domain.model.UnitSystem
 import com.example.ui.components.EmptyStateCard
 import com.example.ui.components.FitTrackCard
 import com.example.ui.components.SectionHeader
 import com.example.ui.theme.FitTrackThemeExt
 import com.example.ui.theme.MonoMetricMedium
 import com.example.ui.theme.MonoMetricSmall
+import com.example.ui.theme.WorkoutCreamText
 import com.example.ui.theme.WorkoutCrimson
 import com.example.ui.theme.WorkoutCrimsonBright
+import com.example.ui.theme.WorkoutOutline
 import com.example.ui.theme.WorkoutRoyalBlue
 import com.example.ui.theme.WorkoutRoyalBlueBright
 import com.example.ui.theme.WorkoutRoyalBlueGlow
 import com.example.viewmodel.FitTrackUiState
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.math.max
 
 @Composable
 fun WorkoutScreen(
@@ -103,6 +116,7 @@ fun WorkoutScreen(
 
     var showCreateTemplate by remember { mutableStateOf(false) }
     var showCreateExercise by remember { mutableStateOf(false) }
+    var showSevenDayVolumeDialog by remember { mutableStateOf(false) }
     var exerciseQuery by remember { mutableStateOf("") }
     var selectedMuscleFilter by remember { mutableStateOf<String?>(null) }
 
@@ -156,7 +170,10 @@ fun WorkoutScreen(
                     accentGradientEnd = Color(0xFF471015),
                     borderColor = WorkoutCrimsonBright,
                     depthElevation = 5.dp,
-                    modifier = Modifier.weight(1f)
+                    onClick = { showSevenDayVolumeDialog = true },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("seven_day_volume_card")
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
@@ -169,7 +186,7 @@ fun WorkoutScreen(
                         Text(
                             text = "7-DAY VOLUME",
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.8f),
+                            color = Color.White.copy(alpha = 0.85f),
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -179,6 +196,12 @@ fun WorkoutScreen(
                         style = MonoMetricMedium,
                         color = Color.White,
                         fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Tap for daily log ▸",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = WorkoutCreamText.copy(alpha = 0.85f)
                     )
                 }
 
@@ -282,6 +305,11 @@ fun WorkoutScreen(
                             val exercises = remember(template.exercisesJson) {
                                 SeedSerialization.decodeTemplateExercises(template.exercisesJson)
                             }
+                            val lastSession = remember(state.workoutSessions, template.id, template.name) {
+                                state.workoutSessions.firstOrNull {
+                                    it.templateId == template.id || it.templateName.equals(template.name, ignoreCase = true)
+                                }
+                            }
                             FitTrackCard(
                                 depthElevation = 6.dp,
                                 modifier = Modifier.testTag("template_card_${template.id}")
@@ -309,7 +337,8 @@ fun WorkoutScreen(
                                             Text(
                                                 text = template.name,
                                                 style = MaterialTheme.typography.titleLarge,
-                                                fontWeight = FontWeight.Bold
+                                                fontWeight = FontWeight.Bold,
+                                                color = WorkoutCreamText
                                             )
                                             Spacer(modifier = Modifier.width(8.dp))
                                             Surface(
@@ -333,6 +362,15 @@ fun WorkoutScreen(
                                                 color = ext.mutedText
                                             )
                                         }
+                                        Text(
+                                            text = if (lastSession != null) {
+                                                "Last done: ${lastSession.dateKey} • ${FitnessCalculations.formatVolume(lastSession.totalVolumeKg, unit)}"
+                                            } else {
+                                                "No completed sessions yet"
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (lastSession != null) WorkoutRoyalBlueGlow else ext.mutedText
+                                        )
                                     }
                                     IconButton(onClick = { onDeleteTemplate(template.id) }) {
                                         Icon(
@@ -344,8 +382,11 @@ fun WorkoutScreen(
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 exercises.take(5).forEach { ex ->
+                                    val wtSuffix = if (ex.targetWeightKg > 0.0) {
+                                        " • ${FitnessCalculations.formatWeight(ex.targetWeightKg, unit)}"
+                                    } else ""
                                     Text(
-                                        text = "• ${ex.exerciseName} (${ex.targetSets}×${ex.targetReps})",
+                                        text = "• ${ex.exerciseName} (${ex.targetSets}×${ex.targetReps}$wtSuffix)",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -547,9 +588,17 @@ fun WorkoutScreen(
                             containerColor = WorkoutCrimson,
                             accentGradientEnd = WorkoutRoyalBlue,
                             borderColor = WorkoutRoyalBlueGlow.copy(alpha = 0.55f),
-                            depthElevation = 6.dp
+                            depthElevation = 6.dp,
+                            onClick = { showSevenDayVolumeDialog = true }
                         ) {
-                            Text("Strength Volume Summary", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Strength Volume Summary", style = MaterialTheme.typography.titleMedium, color = WorkoutCreamText, fontWeight = FontWeight.Bold)
+                                Text("7-Day Log ▸", style = MaterialTheme.typography.labelSmall, color = WorkoutCreamText.copy(alpha = 0.85f))
+                            }
                             Spacer(modifier = Modifier.height(10.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -579,7 +628,12 @@ fun WorkoutScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(session.templateName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            text = session.templateName,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = WorkoutCreamText
+                                        )
                                         Text(
                                             text = "${session.dateKey} • ${session.durationMinutes} min • ${FitnessCalculations.formatVolume(session.totalVolumeKg, unit)} • ~${session.estimatedCalories} kcal est.",
                                             style = MaterialTheme.typography.bodySmall,
@@ -636,6 +690,355 @@ fun WorkoutScreen(
             }
         )
     }
+
+    if (showSevenDayVolumeDialog) {
+        SevenDayVolumeProgressDialog(
+            workoutSessions = state.workoutSessions,
+            allWorkoutSets = state.allWorkoutSets,
+            cardioSessions = state.cardioSessions,
+            unitSystem = unit,
+            onDismiss = { showSevenDayVolumeDialog = false }
+        )
+    }
+}
+
+private data class SevenDayEntry(
+    val dateKey: String,
+    val dayShort: String,
+    val dayNumber: String,
+    val fullLabel: String,
+    val workouts: List<WorkoutSessionEntity>,
+    val cardio: List<CardioSessionEntity>,
+    val volumeKg: Double
+)
+
+@Composable
+private fun SevenDayVolumeProgressDialog(
+    workoutSessions: List<WorkoutSessionEntity>,
+    allWorkoutSets: List<WorkoutSetEntity>,
+    cardioSessions: List<CardioSessionEntity>,
+    unitSystem: UnitSystem,
+    onDismiss: () -> Unit
+) {
+    val ext = FitTrackThemeExt.colors
+    val days = remember(workoutSessions, cardioSessions) {
+        val parseFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val weekdayFmt = SimpleDateFormat("EEE", Locale.US)
+        val fullFmt = SimpleDateFormat("EEE, MMM d", Locale.US)
+        (6 downTo 0).map { daysAgo ->
+            val dk = FitnessCalculations.dateKeyDaysAgo(daysAgo)
+            val parsed: Date? = runCatching { parseFmt.parse(dk) }.getOrNull()
+            val daySessions = workoutSessions.filter { it.dateKey == dk }
+            val dayCardio = cardioSessions.filter { it.dateKey == dk }
+            SevenDayEntry(
+                dateKey = dk,
+                dayShort = if (daysAgo == 0) "Today" else parsed?.let { weekdayFmt.format(it) } ?: dk.takeLast(2),
+                dayNumber = dk.takeLast(2),
+                fullLabel = if (daysAgo == 0) "Today ($dk)" else parsed?.let { fullFmt.format(it) } ?: dk,
+                workouts = daySessions,
+                cardio = dayCardio,
+                volumeKg = daySessions.sumOf { it.totalVolumeKg }
+            )
+        }
+    }
+
+    val defaultSelectedIndex = remember(days) {
+        val lastActive = days.indexOfLast { it.workouts.isNotEmpty() || it.cardio.isNotEmpty() }
+        if (lastActive >= 0) lastActive else days.lastIndex
+    }
+    var selectedDayIndex by remember(defaultSelectedIndex) { mutableIntStateOf(defaultSelectedIndex) }
+    val selectedDay = days[selectedDayIndex.coerceIn(0, days.lastIndex)]
+    val maxDayVol = max(1.0, days.maxOfOrNull { it.volumeKg } ?: 1.0)
+    val total7DayVol = days.sumOf { it.volumeKg }
+    val activeDaysCount = days.count { it.workouts.isNotEmpty() || it.cardio.isNotEmpty() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1A0F18),
+        titleContentColor = WorkoutCreamText,
+        title = {
+            Column {
+                Text(
+                    text = "7-Day Workout Progress",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = WorkoutCreamText
+                )
+                Text(
+                    text = "${FitnessCalculations.formatVolume(total7DayVol, unitSystem)} • $activeDaysCount/7 active days",
+                    style = MonoMetricSmall,
+                    color = WorkoutRoyalBlueGlow
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .testTag("seven_day_volume_dialog"),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Interactive 7-day selector bar chart strip
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xFF120B12),
+                    border = BorderStroke(1.dp, WorkoutOutline)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        days.forEachIndexed { idx, entry ->
+                            val isSelected = idx == selectedDayIndex
+                            val hasWorkout = entry.workouts.isNotEmpty()
+                            val hasCardio = entry.cardio.isNotEmpty()
+                            val barRatio = if (entry.volumeKg > 0.0) {
+                                (entry.volumeKg / maxDayVol).toFloat().coerceIn(0.18f, 1f)
+                            } else if (hasCardio) 0.14f else 0.06f
+
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(
+                                        if (isSelected) WorkoutRoyalBlue.copy(alpha = 0.55f)
+                                        else Color.Transparent
+                                    )
+                                    .clickable { selectedDayIndex = idx }
+                                    .padding(vertical = 6.dp, horizontal = 2.dp)
+                                    .testTag("seven_day_cell_$idx")
+                            ) {
+                                // Mini volume bar
+                                Box(
+                                    modifier = Modifier
+                                        .height(46.dp)
+                                        .width(12.dp),
+                                    contentAlignment = Alignment.BottomCenter
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height((46f * barRatio).dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(
+                                                when {
+                                                    hasWorkout && isSelected -> WorkoutCreamText
+                                                    hasWorkout -> WorkoutCrimsonBright
+                                                    hasCardio -> WorkoutRoyalBlueGlow
+                                                    else -> Color.White.copy(alpha = 0.14f)
+                                                }
+                                            )
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = entry.dayShort.take(3),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isSelected) WorkoutCreamText else ext.mutedText,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    text = entry.dayNumber,
+                                    style = MonoMetricSmall,
+                                    color = if (isSelected) Color.White else ext.mutedText
+                                )
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            when {
+                                                hasWorkout -> WorkoutCrimsonBright
+                                                hasCardio -> WorkoutRoyalBlueGlow
+                                                else -> Color.Transparent
+                                            }
+                                        )
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Selected Day Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = selectedDay.fullLabel,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = WorkoutCreamText
+                    )
+                    Text(
+                        text = FitnessCalculations.formatVolume(selectedDay.volumeKg, unitSystem),
+                        style = MonoMetricSmall,
+                        color = WorkoutRoyalBlueGlow,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // Selected Day Strength Workouts + Exercise Breakdown
+                if (selectedDay.workouts.isEmpty() && selectedDay.cardio.isEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFF22141E),
+                        border = BorderStroke(1.dp, WorkoutOutline)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Rest / Recovery Day",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = WorkoutCreamText,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "No strength or cardio sessions logged on this day. Tap another day above to inspect.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ext.mutedText
+                            )
+                        }
+                    }
+                } else {
+                    selectedDay.workouts.forEach { session ->
+                        val sessionSets = remember(allWorkoutSets, session.id) {
+                            allWorkoutSets
+                                .filter { it.workoutSessionId == session.id && it.completed }
+                                .sortedBy { it.setNumber }
+                        }
+                        val groupedByExercise = remember(sessionSets) {
+                            sessionSets.groupBy { it.exerciseName }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = WorkoutCrimson.copy(alpha = 0.35f),
+                            border = BorderStroke(1.dp, WorkoutCrimsonBright.copy(alpha = 0.7f))
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = session.templateName,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = WorkoutCreamText,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        text = "${session.durationMinutes}m",
+                                        style = MonoMetricSmall,
+                                        color = Color.White
+                                    )
+                                }
+                                Text(
+                                    text = "${FitnessCalculations.formatVolume(session.totalVolumeKg, unitSystem)} • ${sessionSets.size} sets • ~${session.estimatedCalories} kcal",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.85f)
+                                )
+                                if (session.prCount > 0) {
+                                    Text(
+                                        text = "★ ${session.prCount} Personal Record${if (session.prCount > 1) "s" else ""}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = ext.success,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                if (groupedByExercise.isNotEmpty()) {
+                                    HorizontalDivider(color = Color.White.copy(alpha = 0.16f))
+                                    groupedByExercise.forEach { (exerciseName, exSets) ->
+                                        val workingSets = exSets.filter { !it.warmup }.ifEmpty { exSets }
+                                        val setsLine = workingSets.joinToString(", ") { s ->
+                                            "${FitnessCalculations.formatWeight(s.weightKg, unitSystem, includeUnit = false)}×${s.reps}"
+                                        }
+                                        Column {
+                                            Text(
+                                                text = exerciseName,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = WorkoutCreamText
+                                            )
+                                            Text(
+                                                text = "${workingSets.size} sets (${unitSystem.weightUnit}): $setsLine",
+                                                style = MonoMetricSmall,
+                                                color = Color.White.copy(alpha = 0.8f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    selectedDay.cardio.forEach { cardio ->
+                        val act = CardioActivityType.fromNameSafe(cardio.activityType)
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = WorkoutRoyalBlue.copy(alpha = 0.4f),
+                            border = BorderStroke(1.dp, WorkoutRoyalBlueGlow.copy(alpha = 0.6f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Cardio: ${act.label}",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = WorkoutCreamText
+                                    )
+                                    val distPart = if (cardio.distanceKm > 0) {
+                                        " • ${FitnessCalculations.formatDistance(cardio.distanceKm, unitSystem)}"
+                                    } else ""
+                                    Text(
+                                        text = "${cardio.durationMinutes} min$distPart • ~${cardio.caloriesEstimated} kcal",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.White.copy(alpha = 0.85f)
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.Rounded.DirectionsRun,
+                                    contentDescription = null,
+                                    tint = WorkoutRoyalBlueGlow
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close", color = WorkoutCreamText, fontWeight = FontWeight.Bold)
+            }
+        }
+    )
 }
 
 @Composable
