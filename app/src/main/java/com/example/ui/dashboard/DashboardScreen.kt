@@ -1,7 +1,5 @@
 package com.example.ui.dashboard
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
@@ -98,8 +96,8 @@ fun DashboardScreen(
     appUpdateStatus: AppUpdateStatus = AppUpdateStatus.Idle,
     apkDownloadState: ApkDownloadState = ApkDownloadState.Idle,
     updateBannerDismissed: Boolean = false,
-    scoreAnimateFrom: Int = state.dailyScore.totalScore,
-    scoreAnimationTrigger: Int = 0,
+    scoreIncreaseFrom: Int? = null,
+    onScoreIncreaseAnimationFinished: () -> Unit = {},
     onStartInAppUpdate: (AppUpdateInfo) -> Unit = {},
     onCancelInAppUpdate: () -> Unit = {},
     onInstallDownloadedApk: () -> Unit = {},
@@ -224,8 +222,8 @@ fun DashboardScreen(
                 dailyScore = state.dailyScore,
                 activeStreakDays = state.activeStreakDays,
                 goalType = goalType,
-                animateFromScore = scoreAnimateFrom,
-                animationTrigger = scoreAnimationTrigger,
+                increaseFromScore = scoreIncreaseFrom,
+                onIncreaseAnimationFinished = onScoreIncreaseAnimationFinished,
                 onClick = { showScoreBreakdown = true }
             )
         }
@@ -301,30 +299,11 @@ fun DashboardScreen(
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    text = "Weight & Trend",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                if (state.preferences.weightTrendResetDateKey.isNotBlank()) {
-                                    Surface(
-                                        shape = RoundedCornerShape(999.dp),
-                                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f),
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.45f))
-                                    ) {
-                                        Text(
-                                            text = "From ${state.preferences.weightTrendResetDateKey.takeLast(5)}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.secondary,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
-                                        )
-                                    }
-                                }
-                            }
+                            Text(
+                                text = "Weight & Trend",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     imageVector = directionIcon,
@@ -349,8 +328,12 @@ fun DashboardScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.RestartAlt,
-                                contentDescription = "Reset Weight and Trend baseline",
-                                tint = ext.mutedText
+                                contentDescription = "Reset or restore Weight and Trend",
+                                tint = if (state.preferences.weightTrendResetDateKey.isNotBlank()) {
+                                    MaterialTheme.colorScheme.secondary
+                                } else {
+                                    ext.mutedText
+                                }
                             )
                         }
                         Button(

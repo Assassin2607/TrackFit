@@ -194,36 +194,18 @@ fun WorkoutScreen(
             .testTag("workout_screen")
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "Training Studio",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        text = "${state.workoutsThisWeek} / ${state.profile?.trainingDaysPerWeek ?: 4} sessions this week",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = ext.mutedText
-                    )
-                }
-                Button(
-                    onClick = onOpenCardioDialog,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = WorkoutRoyalBlue,
-                        contentColor = Color.White
-                    ),
-                    modifier = Modifier.testTag("workout_quick_cardio_button")
-                ) {
-                    Icon(Icons.Rounded.DirectionsRun, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Cardio")
-                }
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Training Studio",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    text = "${state.workoutsThisWeek} / ${state.profile?.trainingDaysPerWeek ?: 4} sessions this week",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ext.mutedText
+                )
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -282,52 +264,20 @@ fun WorkoutScreen(
                         .weight(1f)
                         .testTag("seven_day_volume_card")
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = if (isHomeMode) Icons.Rounded.Home else Icons.Rounded.FitnessCenter,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (isHomeMode) "7-DAY HOME REPS" else "7-DAY VOLUME",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.85f),
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Surface(
-                            onClick = { showVolumeResetDialog = true },
-                            shape = RoundedCornerShape(999.dp),
-                            color = Color.Black.copy(alpha = 0.25f),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.30f)),
-                            modifier = Modifier.testTag("reset_seven_day_volume_button")
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.RestartAlt,
-                                    contentDescription = "Reset 7-day volume baseline",
-                                    tint = WorkoutCreamText,
-                                    modifier = Modifier.size(12.dp)
-                                )
-                                Spacer(modifier = Modifier.width(2.dp))
-                                Text(
-                                    text = "Reset",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = WorkoutCreamText,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (isHomeMode) Icons.Rounded.Home else Icons.Rounded.FitnessCenter,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isHomeMode) "7-DAY HOME REPS" else "7-DAY VOLUME",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
@@ -342,11 +292,7 @@ fun WorkoutScreen(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = if (volResetDate.isNotBlank()) {
-                            "Since ${volResetDate.takeLast(5)} • Daily log ▸"
-                        } else {
-                            "Tap for daily log ▸"
-                        },
+                        text = "Tap for daily log ▸",
                         style = MaterialTheme.typography.labelSmall,
                         color = WorkoutCreamText.copy(alpha = 0.85f)
                     )
@@ -358,7 +304,9 @@ fun WorkoutScreen(
                     borderColor = WorkoutRoyalBlueBright,
                     depthElevation = 5.dp,
                     onClick = onOpenCardioDialog,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("workout_quick_cardio_button")
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
@@ -369,9 +317,9 @@ fun WorkoutScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "TODAY CARDIO",
+                            text = "CARDIO",
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.82f),
+                            color = Color.White.copy(alpha = 0.85f),
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -381,6 +329,12 @@ fun WorkoutScreen(
                         style = MonoMetricMedium,
                         color = Color.White,
                         fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "+ Log cardio ▸",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = WorkoutCreamText.copy(alpha = 0.85f)
                     )
                 }
             }
@@ -424,18 +378,33 @@ fun WorkoutScreen(
                                 "One-tap launch with previous weights & reps pre-loaded"
                             },
                             trailing = {
-                                Button(
-                                    onClick = { showCreateTemplate = true },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = WorkoutRoyalBlue,
-                                        contentColor = Color.White
-                                    ),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                    modifier = Modifier.testTag("create_template_button")
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("New")
+                                    IconButton(
+                                        onClick = { showVolumeResetDialog = true },
+                                        modifier = Modifier.testTag("reset_seven_day_volume_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.RestartAlt,
+                                            contentDescription = "Reset or restore 7-day volume baseline",
+                                            tint = if (volResetDate.isNotBlank()) WorkoutCreamText else ext.mutedText
+                                        )
+                                    }
+                                    Button(
+                                        onClick = { showCreateTemplate = true },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = WorkoutRoyalBlue,
+                                            contentColor = Color.White
+                                        ),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                        modifier = Modifier.testTag("create_template_button")
+                                    ) {
+                                        Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("New")
+                                    }
                                 }
                             }
                         )
@@ -1040,21 +1009,17 @@ private fun SevenDayVolumeProgressDialog(
                         color = WorkoutCreamText
                     )
                     Text(
-                        text = "${FitnessCalculations.formatVolume(total7DayVol, unitSystem)} • $activeDaysCount/7 active days" +
-                            if (activeResetDateKey.isNotBlank()) " (from $activeResetDateKey)" else "",
+                        text = "${FitnessCalculations.formatVolume(total7DayVol, unitSystem)} • $activeDaysCount/7 active days",
                         style = MonoMetricSmall,
                         color = WorkoutRoyalBlueGlow
                     )
                 }
-                TextButton(onClick = onOpenResetDialog) {
+                IconButton(onClick = onOpenResetDialog) {
                     Icon(
                         imageVector = Icons.Rounded.RestartAlt,
-                        contentDescription = null,
-                        tint = WorkoutCreamText,
-                        modifier = Modifier.size(16.dp)
+                        contentDescription = "Reset or restore 7-day volume",
+                        tint = if (activeResetDateKey.isNotBlank()) WorkoutCreamText else ext.mutedText
                     )
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text("Reset", color = WorkoutCreamText)
                 }
             }
         },

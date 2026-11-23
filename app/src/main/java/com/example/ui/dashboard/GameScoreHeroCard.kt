@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -39,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -154,41 +154,53 @@ fun GameScoreHeroCard(
     dailyScore: DailyScoreBreakdown,
     activeStreakDays: Int,
     goalType: GoalType,
-    animateFromScore: Int = dailyScore.totalScore,
-    animationTrigger: Int = 0,
+    increaseFromScore: Int? = null,
+    onIncreaseAnimationFinished: () -> Unit = {},
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val targetScore = dailyScore.totalScore.coerceIn(0, 100)
-    val animatedScoreState = remember { Animatable(animateFromScore.coerceIn(0, 100).toFloat()) }
+    val shouldAnimateIncrease = increaseFromScore != null && increaseFromScore < targetScore
+    val initialScoreValue = if (shouldAnimateIncrease) {
+        increaseFromScore!!.coerceIn(0, 100).toFloat()
+    } else {
+        targetScore.toFloat()
+    }
+    val animatedScoreState = remember { Animatable(initialScoreValue) }
     var scoreDeltaBadge by remember { mutableIntStateOf(0) }
     var showDeltaBadge by remember { mutableStateOf(false) }
 
-    LaunchedEffect(animationTrigger, targetScore) {
-        val startVal = if (animationTrigger > 0 && animateFromScore != targetScore) {
-            animateFromScore.coerceIn(0, 100).toFloat()
-        } else {
-            animatedScoreState.value
-        }
-        val delta = targetScore - startVal.roundToInt()
-        if (delta != 0) {
-            animatedScoreState.snapTo(startVal)
-            if (delta > 0) {
-                scoreDeltaBadge = delta
-                showDeltaBadge = true
+    // Ensure leaving Home mid-animation still marks the increase as consumed so it never replays
+    DisposableEffect(increaseFromScore) {
+        onDispose {
+            if (increaseFromScore != null) {
+                onIncreaseAnimationFinished()
             }
+        }
+    }
+
+    LaunchedEffect(showDeltaBadge) {
+        if (showDeltaBadge) {
+            delay(2200L)
+            showDeltaBadge = false
+        }
+    }
+
+    LaunchedEffect(increaseFromScore, targetScore) {
+        if (increaseFromScore != null && increaseFromScore < targetScore) {
+            val startVal = increaseFromScore.coerceIn(0, 100)
+            val delta = targetScore - startVal
+            scoreDeltaBadge = delta
+            showDeltaBadge = true
+            animatedScoreState.snapTo(startVal.toFloat())
             animatedScoreState.animateTo(
                 targetValue = targetScore.toFloat(),
                 animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing)
             )
-            if (delta > 0) {
-                delay(2200L)
-                showDeltaBadge = false
-            }
+            onIncreaseAnimationFinished()
         } else {
-            // No log change — stay smoothly at current score without replaying
+            // Static render when score has not increased (or on normal tab switches)
             animatedScoreState.snapTo(targetScore.toFloat())
-            showDeltaBadge = false
         }
     }
 
@@ -196,17 +208,12 @@ fun GameScoreHeroCard(
     val rank = resolveDailyScoreRank(displayedScore)
     val maxedPillars = dailyScore.components.count { it.earned >= it.maxPoints }
 
-    val xpProgress = if (rank.nextRankScore != null) {
+    val animatedXp = if (rank.nextRankScore != null) {
         val span = (rank.nextRankScore - rank.minScore).coerceAtLeast(1)
         ((animatedScoreState.value - rank.minScore) / span.toFloat()).coerceIn(0f, 1f)
     } else {
         1f
     }
-    val animatedXp by animateFloatAsState(
-        targetValue = xpProgress,
-        animationSpec = spring(dampingRatio = 0.78f, stiffness = 200f),
-        label = "gameXpBar"
-    )
 
     val outerShape = RoundedCornerShape(22.dp)
     val surfaceTop = lerp(HomeIndigoTop, rank.glowColor, 0.13f)

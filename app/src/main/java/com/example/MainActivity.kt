@@ -53,10 +53,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -85,6 +85,7 @@ import com.example.data.repository.FitTrackRepository
 import com.example.domain.model.CardioActivityType
 import com.example.ui.auth.AuthScreen
 import com.example.ui.auth.signOutFromGoogle
+import com.example.ui.components.FitTrackLaunchOverlay
 import com.example.ui.dashboard.DashboardScreen
 import com.example.ui.nutrition.NutritionScreen
 import com.example.ui.onboarding.OnboardingScreen
@@ -139,6 +140,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun FitTrackRoot() {
     var currentUser by remember { mutableStateOf(Firebase.auth.currentUser) }
+    var showLaunchAnimation by rememberSaveable { mutableStateOf(true) }
 
     DisposableEffect(Unit) {
         val listener = FirebaseAuth.AuthStateListener { auth ->
@@ -148,20 +150,31 @@ fun FitTrackRoot() {
         onDispose { Firebase.auth.removeAuthStateListener(listener) }
     }
 
-    val user = currentUser
-    if (user == null) {
-        FitTrackTheme(section = FitTrackSection.HOME) {
-            AuthScreen(onAuthSuccess = { currentUser = Firebase.auth.currentUser })
+    Box(modifier = Modifier.fillMaxSize()) {
+        val user = currentUser
+        if (user == null) {
+            FitTrackTheme(section = FitTrackSection.HOME) {
+                AuthScreen(onAuthSuccess = { currentUser = Firebase.auth.currentUser })
+            }
+        } else {
+            val uid = user.uid
+            // Keyed by UID so switching accounts tears down and recreates all ViewModels & listeners cleanly
+            key(uid) {
+                FitTrackAuthenticatedShell(
+                    currentUserId = uid,
+                    displayName = user.displayName ?: "",
+                    email = user.email ?: "",
+                    isLaunchAnimationActive = showLaunchAnimation
+                )
+            }
         }
-    } else {
-        val uid = user.uid
-        // Keyed by UID so switching accounts tears down and recreates all ViewModels & listeners cleanly
-        key(uid) {
-            FitTrackAuthenticatedShell(
-                currentUserId = uid,
-                displayName = user.displayName ?: "",
-                email = user.email ?: ""
-            )
+
+        if (showLaunchAnimation) {
+            FitTrackTheme(section = FitTrackSection.HOME, applySystemBars = false) {
+                FitTrackLaunchOverlay(
+                    onFinished = { showLaunchAnimation = false }
+                )
+            }
         }
     }
 }
@@ -170,7 +183,8 @@ fun FitTrackRoot() {
 private fun FitTrackAuthenticatedShell(
     currentUserId: String,
     displayName: String,
-    email: String
+    email: String,
+    isLaunchAnimationActive: Boolean = false
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -286,22 +300,27 @@ private fun FitTrackAuthenticatedShell(
     val activeTab = FitTrackTab.fromRoute(currentRoute)
     var showCardioDialog by remember { mutableStateOf(false) }
 
-    // Track last-displayed Home score so returning to Home after a log animates smoothly from old -> new
+    // Track last-displayed Home score so Today's Score animates ONLY when score strictly increases
     var lastSeenHomeScore by remember { mutableStateOf<Int?>(null) }
-    var scoreAnimateFrom by remember { mutableIntStateOf(state.dailyScore.totalScore) }
-    var scoreAnimationTrigger by remember { mutableIntStateOf(0) }
+    var pendingScoreIncreaseFrom by remember { mutableStateOf<Int?>(null) }
 
-    LaunchedEffect(activeTab, state.dailyScore.totalScore) {
-        if (activeTab == FitTrackTab.HOME) {
+    LaunchedEffect(activeTab, state.dailyScore.totalScore, isLaunchAnimationActive) {
+        if (isLaunchAnimationActive) {
+            // While opening animation plays, keep syncing baseline silently without firing a score animation
+            lastSeenHomeScore = state.dailyScore.totalScore
+            pendingScoreIncreaseFrom = null
+        } else if (activeTab == FitTrackTab.HOME) {
             val current = state.dailyScore.totalScore
             val prev = lastSeenHomeScore
             if (prev == null) {
                 lastSeenHomeScore = current
-                scoreAnimateFrom = current
-            } else if (current != prev) {
-                scoreAnimateFrom = prev
-                scoreAnimationTrigger += 1
+                pendingScoreIncreaseFrom = null
+            } else if (current > prev) {
+                pendingScoreIncreaseFrom = prev
                 lastSeenHomeScore = current
+            } else if (current < prev) {
+                lastSeenHomeScore = current
+                pendingScoreIncreaseFrom = null
             }
         }
     }
@@ -454,8 +473,8 @@ private fun FitTrackAuthenticatedShell(
                                         appUpdateStatus = appUpdateStatus,
                                         apkDownloadState = apkDownloadState,
                                         updateBannerDismissed = updateBannerDismissed,
-                                        scoreAnimateFrom = scoreAnimateFrom,
-                                        scoreAnimationTrigger = scoreAnimationTrigger,
+                                        scoreIncreaseFrom = pendingScoreIncreaseFrom,
+                                        onScoreIncreaseAnimationFinished = { pendingScoreIncreaseFrom = null },
                                         onStartInAppUpdate = viewModel::startInAppUpdate,
                                         onCancelInAppUpdate = viewModel::cancelInAppUpdate,
                                         onInstallDownloadedApk = viewModel::installDownloadedApk,
