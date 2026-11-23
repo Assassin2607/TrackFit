@@ -61,6 +61,7 @@ import com.example.ui.components.FitTrackCard
 import com.example.ui.theme.FitTrackThemeExt
 import com.example.ui.theme.MonoMetricMedium
 import com.example.ui.theme.MonoMetricSmall
+import com.example.ui.theme.WorkoutBeigeAccent
 import com.example.ui.theme.WorkoutCreamText
 import com.example.viewmodel.ActiveSetDraft
 import com.example.viewmodel.ActiveWorkoutState
@@ -92,14 +93,18 @@ fun ActiveWorkoutScreen(
             .sumOf { FitnessCalculations.calculateSetVolume(it.weightKg, it.reps) }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .testTag("active_workout_screen")
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+        contentColor = WorkoutCreamText
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .testTag("active_workout_screen")
+        ) {
         // Top Bar: Close + Workout Title (Cream) + Live Stats (no Finish button at top)
         Surface(
             color = MaterialTheme.colorScheme.surface,
@@ -151,36 +156,45 @@ fun ActiveWorkoutScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(exercise.exerciseName, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                text = exercise.exerciseName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = WorkoutCreamText
+                            )
                             Text(
                                 text = "Rest ${exercise.restSeconds}s • ${exercise.muscleGroup}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = FitTrackThemeExt.colors.mutedText
                             )
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             val stepKg = if (unitSystem == UnitSystem.IMPERIAL) 2.26796 else 2.5
                             val stepLabel = if (unitSystem == UnitSystem.IMPERIAL) "+5 lb" else "+2.5 kg"
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 color = MaterialTheme.colorScheme.surfaceVariant,
+                                border = BorderStroke(1.dp, WorkoutBeigeAccent.copy(alpha = 0.45f)),
                                 modifier = Modifier.clickable { onQuickProgression(exIndex, stepKg, 0) }
                             ) {
                                 Text(
                                     text = stepLabel,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = WorkoutBeigeAccent,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
                                 )
                             }
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 color = MaterialTheme.colorScheme.surfaceVariant,
+                                border = BorderStroke(1.dp, FitTrackThemeExt.colors.success.copy(alpha = 0.45f)),
                                 modifier = Modifier.clickable { onQuickProgression(exIndex, 0.0, 1) }
                             ) {
                                 Text(
                                     text = "+1 rep",
                                     style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
                                     color = FitTrackThemeExt.colors.success,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
                                 )
@@ -240,11 +254,12 @@ fun ActiveWorkoutScreen(
 
                     TextButton(
                         onClick = { onAddSet(exIndex) },
+                        colors = ButtonDefaults.textButtonColors(contentColor = WorkoutBeigeAccent),
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     ) {
                         Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Add Set")
+                        Text("Add Set", fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -293,6 +308,7 @@ fun ActiveWorkoutScreen(
                     )
                 }
             }
+        }
         }
     }
 

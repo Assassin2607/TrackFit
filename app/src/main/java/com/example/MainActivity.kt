@@ -141,6 +141,7 @@ class MainActivity : ComponentActivity() {
 fun FitTrackRoot() {
     var currentUser by remember { mutableStateOf(Firebase.auth.currentUser) }
     var showLaunchAnimation by rememberSaveable { mutableStateOf(true) }
+    var mountMainContent by rememberSaveable { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         val listener = FirebaseAuth.AuthStateListener { auth ->
@@ -151,28 +152,34 @@ fun FitTrackRoot() {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        val user = currentUser
-        if (user == null) {
-            FitTrackTheme(section = FitTrackSection.HOME) {
-                AuthScreen(onAuthSuccess = { currentUser = Firebase.auth.currentUser })
-            }
-        } else {
-            val uid = user.uid
-            // Keyed by UID so switching accounts tears down and recreates all ViewModels & listeners cleanly
-            key(uid) {
-                FitTrackAuthenticatedShell(
-                    currentUserId = uid,
-                    displayName = user.displayName ?: "",
-                    email = user.email ?: "",
-                    isLaunchAnimationActive = showLaunchAnimation
-                )
+        if (mountMainContent || !showLaunchAnimation) {
+            val user = currentUser
+            if (user == null) {
+                FitTrackTheme(section = FitTrackSection.HOME) {
+                    AuthScreen(onAuthSuccess = { currentUser = Firebase.auth.currentUser })
+                }
+            } else {
+                val uid = user.uid
+                // Keyed by UID so switching accounts tears down and recreates all ViewModels & listeners cleanly
+                key(uid) {
+                    FitTrackAuthenticatedShell(
+                        currentUserId = uid,
+                        displayName = user.displayName ?: "",
+                        email = user.email ?: "",
+                        isLaunchAnimationActive = showLaunchAnimation
+                    )
+                }
             }
         }
 
         if (showLaunchAnimation) {
             FitTrackTheme(section = FitTrackSection.HOME, applySystemBars = false) {
                 FitTrackLaunchOverlay(
-                    onFinished = { showLaunchAnimation = false }
+                    onReadyForContent = { mountMainContent = true },
+                    onFinished = {
+                        mountMainContent = true
+                        showLaunchAnimation = false
+                    }
                 )
             }
         }

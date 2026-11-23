@@ -84,6 +84,13 @@ fun MetricBaselineResetDialog(
     onDismiss: () -> Unit
 ) {
     val ext = FitTrackThemeExt.colors
+    val creamText = if (ext.isLightTheme) MaterialTheme.colorScheme.onSurface else Color(0xFFFFF5E1)
+    val beigeAccent = if (ext.isLightTheme) MaterialTheme.colorScheme.primary else Color(0xFFF3DEC0)
+    val beigeMuted = if (ext.isLightTheme) ext.mutedText else Color(0xFFE2D3BE)
+    val dialogContainer = if (ext.isLightTheme) MaterialTheme.colorScheme.surface else Color(0xFF1A1E36)
+    val optionCardBg = if (ext.isLightTheme) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f) else Color(0xFF242A4A)
+    val optionCardBorder = if (ext.isLightTheme) MaterialTheme.colorScheme.outline.copy(alpha = 0.6f) else beigeAccent.copy(alpha = 0.28f)
+
     val todayKey = remember { FitnessCalculations.todayDateKey() }
     val mondayKey = remember { currentWeekMondayDateKey() }
     val recentDays = remember {
@@ -106,15 +113,23 @@ fun MetricBaselineResetDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = dialogContainer,
+        titleContentColor = creamText,
+        textContentColor = beigeMuted,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = Icons.Rounded.RestartAlt,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = beigeAccent
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = creamText
+                )
             }
         },
         text = {
@@ -122,14 +137,14 @@ fun MetricBaselineResetDialog(
                 Text(
                     text = preservedNote,
                     style = MaterialTheme.typography.bodySmall,
-                    color = ext.mutedText
+                    color = beigeMuted
                 )
 
                 if (activeResetDateKey.isNotBlank()) {
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)),
+                        color = beigeAccent.copy(alpha = 0.14f),
+                        border = BorderStroke(1.dp, beigeAccent.copy(alpha = 0.55f)),
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
@@ -145,7 +160,7 @@ fun MetricBaselineResetDialog(
                             Icon(
                                 imageVector = Icons.Rounded.History,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = beigeAccent,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(10.dp))
@@ -153,13 +168,13 @@ fun MetricBaselineResetDialog(
                                 Text(
                                     text = "Restore Full History",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary
+                                    fontWeight = FontWeight.Bold,
+                                    color = creamText
                                 )
                                 Text(
                                     text = "Clear reset and include all logged days again",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = ext.mutedText
+                                    color = beigeMuted
                                 )
                             }
                         }
@@ -169,8 +184,8 @@ fun MetricBaselineResetDialog(
                 // Quick Preset 1: Start Fresh Right Now (zeroes out earlier test logs from today too)
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
+                    color = optionCardBg,
+                    border = BorderStroke(1.dp, optionCardBorder),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
@@ -186,7 +201,7 @@ fun MetricBaselineResetDialog(
                         Icon(
                             imageVector = Icons.Rounded.Today,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = beigeAccent,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
@@ -194,12 +209,13 @@ fun MetricBaselineResetDialog(
                             Text(
                                 text = "Start Fresh Right Now",
                                 style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                color = creamText
                             )
                             Text(
                                 text = "Resets counter to 0 from this moment onward ($todayKey)",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = ext.mutedText
+                                color = beigeMuted
                             )
                         }
                     }
@@ -208,8 +224,8 @@ fun MetricBaselineResetDialog(
                 // Quick Preset 2: Start from First of This Week (Monday)
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
+                    color = optionCardBg,
+                    border = BorderStroke(1.dp, optionCardBorder),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
@@ -225,7 +241,7 @@ fun MetricBaselineResetDialog(
                         Icon(
                             imageVector = Icons.Rounded.CalendarMonth,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.secondary,
+                            tint = beigeAccent,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
@@ -233,12 +249,13 @@ fun MetricBaselineResetDialog(
                             Text(
                                 text = "Start from First of Week (Mon)",
                                 style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                color = creamText
                             )
                             Text(
                                 text = "Count logs from Monday ($mondayKey) onward",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = ext.mutedText
+                                color = beigeMuted
                             )
                         }
                     }
@@ -248,7 +265,8 @@ fun MetricBaselineResetDialog(
                 Text(
                     text = "Or pick a specific start day:",
                     style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    color = creamText
                 )
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -258,7 +276,13 @@ fun MetricBaselineResetDialog(
                         FilterChip(
                             selected = selectedCustomDate == dk,
                             onClick = { selectedCustomDate = dk },
-                            label = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                            label = {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (selectedCustomDate == dk) creamText else beigeMuted
+                                )
+                            }
                         )
                     }
                 }
@@ -270,9 +294,13 @@ fun MetricBaselineResetDialog(
                     onApplyReset(selectedCustomDate, 0L)
                     onDismiss()
                 },
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = beigeAccent,
+                    contentColor = Color(0xFF141729)
+                ),
                 modifier = Modifier.testTag("confirm_custom_reset_button")
             ) {
-                Text("Start from $selectedCustomDate")
+                Text("Start from $selectedCustomDate", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
@@ -282,14 +310,22 @@ fun MetricBaselineResetDialog(
                         onClick = {
                             onClearReset()
                             onDismiss()
-                        }
+                        },
+                        colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                            contentColor = beigeAccent
+                        )
                     ) {
                         Icon(Icons.Rounded.History, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Restore")
+                        Text("Restore", fontWeight = FontWeight.SemiBold)
                     }
                 }
-                TextButton(onClick = onDismiss) {
+                TextButton(
+                    onClick = onDismiss,
+                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                        contentColor = beigeMuted
+                    )
+                ) {
                     Text("Cancel")
                 }
             }
